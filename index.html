@@ -617,7 +617,9 @@ async function loadCell(cell) {
     return na - nb;
   });
 
-  for (const l of lists) {
+  // Las listas se piden en paralelo: en serie el panel tardaba ~90s por la paginación
+  // de Sprint 8 (1.3k tarjetas) y Sprint 1 de Insumos.
+  const rows = await Promise.all(lists.map(async l => {
     try {
       const tasks = await tasksOfList(l.id);
       const row = { id:l.id, name:l.name, parents:0, subs:0, buckets:emptyBuckets() };
@@ -627,13 +629,18 @@ async function loadCell(cell) {
         if (isSub) { row.subs++; row.buckets[bk].s++; }
         else       { row.parents++; row.buckets[bk].p++; }
       }
-      res.lists.push(row);
-      res.parents += row.parents;
-      res.subs    += row.subs;
-      BUCKETS.forEach(b => { res.buckets[b.key].p += row.buckets[b.key].p; res.buckets[b.key].s += row.buckets[b.key].s; });
+      return row;
     } catch (e) {
       res.error = (res.error ? res.error + ' · ' : '') + `${l.name}: ${e.message}`;
+      return null;
     }
+  }));
+
+  for (const row of rows.filter(Boolean)) {
+    res.lists.push(row);
+    res.parents += row.parents;
+    res.subs    += row.subs;
+    BUCKETS.forEach(b => { res.buckets[b.key].p += row.buckets[b.key].p; res.buckets[b.key].s += row.buckets[b.key].s; });
   }
 
   // Respaldo: si el proxy no devolvió nada (token del worker vencido, caída, etc.)
@@ -657,9 +664,8 @@ async function loadCell(cell) {
 
 async function loadAll() {
   document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div>Cargando datos de ClickUp…</div>';
-  DATA = [];
   USED_SNAPSHOT = false;
-  for (const c of CELLS) DATA.push(await loadCell(c));
+  DATA = await Promise.all(CELLS.map(loadCell));
   document.getElementById('lastUpdated').textContent = USED_SNAPSHOT
     ? `⚠ Snapshot del ${SNAPSHOT.date} (proxy sin responder)`
     : 'Actualizado ' + new Date().toLocaleString('es-AR');
