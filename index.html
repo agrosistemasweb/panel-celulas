@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Panel Células - Módulos AgroSistemas</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%236366f1'/%3E%3Ctext x='50%25' y='54%25' text-anchor='middle' fill='white' font-family='sans-serif' font-size='32' font-weight='bold'%3EPC%3C/text%3E%3C/svg%3E">
+<style>
+:root {
+  --bg:#0f1117; --surface:#1a1d27; --surface2:#242736; --border:#2e3244;
+  --text:#e4e6ef; --text-muted:#8b8fa3;
+  --accent:#6366f1; --accent-hover:#818cf8;
+  --success:#22c55e; --warning:#f59e0b; --danger:#ef4444; --info:#3b82f6;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+
+.header { background:var(--surface); border-bottom:1px solid var(--border); padding:16px 24px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:100; flex-wrap:wrap; gap:10px; }
+.header h1 { font-size:20px; font-weight:600; display:flex; align-items:center; gap:10px; }
+.header h1 .badge { background:var(--accent); color:white; font-size:12px; padding:2px 10px; border-radius:12px; font-weight:500; }
+.header-actions { display:flex; gap:10px; align-items:center; }
+.btn { background:var(--surface2); border:1px solid var(--border); color:var(--text); padding:8px 16px; border-radius:8px; cursor:pointer; font-size:13px; transition:all .2s; }
+.btn:hover { background:var(--border); }
+.btn.active { background:var(--accent); border-color:var(--accent); color:white; }
+.last-updated { font-size:12px; color:var(--text-muted); }
+
+.tabs { display:flex; gap:4px; padding:12px 24px 0; border-bottom:1px solid var(--border); flex-wrap:wrap; }
+.tab { padding:10px 18px; background:transparent; border:none; color:var(--text-muted); cursor:pointer; font-size:13px; font-weight:500; border-bottom:2px solid transparent; transition:all .2s; }
+.tab:hover { color:var(--text); }
+.tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+
+.content { padding:20px 24px 60px; }
+
+/* Totalizadores */
+.totalizers { display:grid; grid-template-columns:repeat(5, 1fr); gap:10px; padding:16px 24px 0; }
+@media (max-width:1300px) { .totalizers { grid-template-columns:repeat(3, 1fr); } }
+@media (max-width:800px) { .totalizers { grid-template-columns:repeat(2, 1fr); } }
+.tot-card { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:14px 16px; }
+.tot-card .tot-label { font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.5px; margin-bottom:10px; display:flex; align-items:center; gap:6px; }
+.tot-card .tot-row { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.tot-card .tot-value { font-size:32px; font-weight:800; line-height:1; }
+.tot-card .tot-sub { font-size:11px; color:var(--text-muted); margin-top:6px; }
+.tot-card .tot-ps { display:flex; flex-direction:column; gap:4px; min-width:92px; }
+.tot-card .tot-ps span { background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:4px 10px; font-size:12px; font-weight:600; display:flex; justify-content:space-between; gap:8px; }
+.tot-card .tot-ps .lbl { color:var(--text-muted); }
+
+/* Grid de células */
+.cells-grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:16px; }
+@media (max-width:1300px) { .cells-grid { grid-template-columns:repeat(2, 1fr); } }
+@media (max-width:900px) { .cells-grid { grid-template-columns:1fr; } }
+
+.cell-card { background:var(--surface); border:1px solid var(--border); border-radius:14px; overflow:hidden; display:flex; flex-direction:column; }
+.cell-card.qa { border-color:#a855f7; }
+.cell-card.pending { opacity:.75; border-style:dashed; }
+.cell-header { padding:14px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:10px; }
+.cell-num { width:38px; height:38px; border-radius:10px; display:flex; align-items:center; justify-content:center; color:white; font-weight:800; font-size:15px; flex-shrink:0; }
+.cell-title { flex:1; min-width:0; }
+.cell-title .mod { font-size:15px; font-weight:600; }
+.cell-title .sub { font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.4px; }
+.cell-body { padding:12px 16px; display:flex; flex-direction:column; gap:12px; flex:1; }
+
+.members { display:flex; flex-wrap:wrap; gap:6px; }
+.member { display:inline-flex; align-items:center; gap:6px; background:var(--surface2); border:1px solid var(--border); border-radius:20px; padding:3px 10px 3px 3px; font-size:12px; }
+.member .av { width:22px; height:22px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:700; color:white; }
+
+.nums { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; }
+.num-box { background:var(--surface2); border:1px solid var(--border); border-radius:9px; padding:9px 10px; text-align:center; }
+.num-box .n { font-size:20px; font-weight:800; }
+.num-box .l { font-size:9.5px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.4px; margin-top:2px; }
+
+.bar { display:flex; height:12px; border-radius:6px; overflow:hidden; background:var(--surface2); border:1px solid var(--border); }
+.bar-seg { min-width:0; transition:width .3s; }
+.bar-legend { display:flex; flex-wrap:wrap; gap:8px 12px; }
+.lg { display:flex; align-items:center; gap:5px; font-size:11px; color:var(--text-muted); }
+.lg .dot { width:9px; height:9px; border-radius:2px; }
+.lg b { color:var(--text); }
+
+.vs-box { background:var(--bg); border:1px solid var(--border); border-radius:9px; padding:10px; }
+.vs-box .vs-title { font-size:10px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.5px; margin-bottom:8px; }
+.vs-row { display:flex; align-items:center; gap:8px; margin-bottom:6px; font-size:11px; }
+.vs-row:last-child { margin-bottom:0; }
+.vs-row .vs-lbl { width:66px; color:var(--text-muted); flex-shrink:0; }
+.vs-track { flex:1; height:8px; background:var(--surface2); border-radius:4px; overflow:hidden; }
+.vs-fill { height:100%; border-radius:4px; }
+.vs-pct { width:78px; text-align:right; font-weight:600; }
+
+.sprint-list { display:flex; flex-direction:column; gap:4px; }
+.sprint-row { display:flex; align-items:center; gap:8px; font-size:11.5px; background:var(--bg); border-radius:6px; padding:5px 9px; }
+.sprint-row .sp-name { flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.sprint-row .sp-n { font-weight:600; font-size:11px; color:var(--text-muted); }
+.sprint-row .sp-n b { color:var(--text); }
+
+.note { font-size:11px; color:var(--text-muted); background:var(--bg); border:1px dashed var(--border); border-radius:8px; padding:8px 10px; line-height:1.5; }
+
+/* Tabla comparativa */
+.table-wrap { background:var(--surface); border:1px solid var(--border); border-radius:14px; overflow:auto; }
+table { width:100%; border-collapse:collapse; font-size:13px; min-width:900px; }
+th { text-align:left; padding:11px 14px; font-size:10.5px; text-transform:uppercase; letter-spacing:.5px; color:var(--text-muted); border-bottom:1px solid var(--border); white-space:nowrap; background:var(--surface2); position:sticky; top:0; }
+td { padding:10px 14px; border-bottom:1px solid var(--border); }
+tr:last-child td { border-bottom:none; }
+tr.baseline td { background:rgba(99,102,241,.08); font-weight:600; }
+tr.tot td { background:var(--surface2); font-weight:700; }
+td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
+.tag { display:inline-block; font-size:10px; padding:2px 7px; border-radius:4px; font-weight:600; text-transform:uppercase; letter-spacing:.3px; }
+
+/* Grafico barras comparativo */
+.chart-card { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:18px; margin-bottom:18px; }
+.chart-card h2 { font-size:15px; font-weight:600; margin-bottom:4px; }
+.chart-card .hint { font-size:11.5px; color:var(--text-muted); margin-bottom:16px; }
+.hbar-row { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
+.hbar-lbl { width:150px; font-size:12.5px; flex-shrink:0; display:flex; align-items:center; gap:7px; }
+.hbar-lbl .sq { width:10px; height:10px; border-radius:3px; }
+.hbar-outer { flex:1; min-width:0; }
+.hbar-track { display:flex; height:26px; background:var(--surface2); border-radius:6px; overflow:hidden; border:1px solid var(--border); }
+.hbar-p, .hbar-s { display:flex; align-items:center; justify-content:flex-end; padding-right:7px; font-size:10.5px; font-weight:700; color:#0f1117; }
+.hbar-val { width:130px; text-align:right; font-size:12px; color:var(--text-muted); font-variant-numeric:tabular-nums; }
+.hbar-val b { color:var(--text); }
+@media (max-width:820px) { .hbar-lbl { width:96px; font-size:11px; } .hbar-val { width:96px; font-size:11px; } }
+
+.section-title { font-size:15px; font-weight:600; margin:24px 0 12px; display:flex; align-items:center; gap:8px; }
+.section-title:first-child { margin-top:0; }
+.section-title .cnt { font-size:11px; color:var(--text-muted); font-weight:500; }
+
+.loading { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:80px 20px; color:var(--text-muted); }
+.spinner { width:40px; height:40px; border:3px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin .8s linear infinite; margin-bottom:16px; }
+@keyframes spin { to { transform:rotate(360deg); } }
+.err { background:rgba(239,68,68,.1); border:1px solid var(--danger); color:#fca5a5; padding:10px 14px; border-radius:9px; font-size:12.5px; margin-bottom:14px; }
+a.link { color:var(--accent); text-decoration:none; }
+a.link:hover { text-decoration:underline; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Panel Células <span class="badge" id="hdrBadge">Módulos AgroSistemas</span></h1>
+  <div class="header-actions">
+    <span class="last-updated" id="lastUpdated">—</span>
+    <button class="btn" id="exportCsvBtn">Exportar CSV</button>
+    <button class="btn" id="refreshBtn">Actualizar</button>
+  </div>
+</div>
+
+<div class="totalizers" id="totalizers"></div>
+
+<div class="tabs">
+  <button class="tab active" data-tab="celulas">Células</button>
+  <button class="tab" data-tab="comparativa">Comparativa vs Contable</button>
+  <button class="tab" data-tab="detalle">Detalle por sprint</button>
+</div>
+
+<div class="content" id="content">
+  <div class="loading"><div class="spinner"></div>Cargando datos de ClickUp…</div>
+</div>
+
+<script>
+// ============================================================
+// CONFIG
+// ============================================================
+const PROXY = 'https://panel-bugs-proxy.lorena-ruiz-e63.workers.dev';
+const TEAM_ID = '9013241237';
+
+// Integrantes reales (ids de ClickUp del team AS)
+const PEOPLE = {
+  87928772:  { name:'Matias Martin',       short:'MM', hex:'#8b5cf6' },
+  89102522:  { name:'Coqui',               short:'CQ', hex:'#a78bfa' },
+  120292638: { name:'Tiago Roccatagliata', short:'TR', hex:'#06b6d4' },
+  82082258:  { name:'Lucía Campisi',       short:'LC', hex:'#22d3ee' },
+  90708484:  { name:'Matías Fluctum',      short:'MF', hex:'#f59e0b' },
+  82082180:  { name:'Capacitación AS',     short:'CA', hex:'#fbbf24' },
+  82053721:  { name:'Ignacio Martín',      short:'IM', hex:'#ef4444' },
+  118014033: { name:'Laura Eciolaza',      short:'LE', hex:'#fb7185' },
+  174607180: { name:'Lorena Ruiz',         short:'LR', hex:'#a855f7' },
+  118075668: { name:'Laura Mignanelli',    short:'LM', hex:'#c084fc' }
+};
+
+// Definición de células. `folders` = folders de ClickUp cuyas listas se descubren dinámicamente.
+// `lists` = listas sueltas hardcodeadas (por si alguna no vive en folder).
+const CELLS = [
+  { n:1, module:'Insumos',  hex:'#22c55e', space:'901313732567', spaceName:'QA - Modulo Insumos App',
+    url:'https://app.clickup.com/9013241237/v/o/s/901313732567',
+    folders:['901317973248'], lists:[], members:[87928772, 89102522] },
+
+  { n:2, module:'Fletes',   hex:'#06b6d4', space:null, spaceName:'— sin space en ClickUp —',
+    url:null, folders:[], lists:[], members:[120292638, 82082258] },
+
+  { n:3, module:'Sueldos',  hex:'#f59e0b', space:null, spaceName:'— sin space en ClickUp —',
+    url:null, folders:[], lists:[], members:[90708484, 82082180] },
+
+  { n:4, module:'Contable', hex:'#6366f1', space:'901312454479', spaceName:'Modulo Contable App',
+    url:'https://app.clickup.com/9013241237/v/o/s/901312454479',
+    folders:['901316203875'], lists:[], members:[82053721, 118014033], baseline:true },
+
+  { n:5, module:'Cereales', hex:'#eab308', space:'901313750767', spaceName:'Modulo Cereales App',
+    url:'https://app.clickup.com/9013241237/v/o/s/901313750767',
+    folders:['901318036212'], lists:[], members:[87928772, 89102522] },
+
+  { n:'QA', module:'QA — todos los módulos', hex:'#a855f7', space:null,
+    spaceName:'Prueba todo lo que entregan las células', url:null,
+    folders:[], lists:[], members:[174607180, 118075668], qa:true }
+];
+
+// Fallback de listas por folder si el endpoint /api/folder/:id/list no responde
+const FALLBACK_LISTS = {
+  '901316203875': [
+    {id:'901323690606', name:'Sprint 1 Modulo Contable'},
+    {id:'901324230121', name:'Sprint 2 Modulo Contable'},
+    {id:'901324539845', name:'Sprint 3 Modulo Contable'},
+    {id:'901325316130', name:'Sprint 4 Modulo Contable'},
+    {id:'901326731539', name:'Sprint 5 Modulo Contable'},
+    {id:'901327168887', name:'Sprint 6 Modulo Contable'},
+    {id:'901327484231', name:'Sprint 7 Modulo Contable'},
+    {id:'901327759271', name:'Sprint 8 Modulo Contable'}
+  ],
+  '901317973248': [
+    {id:'901327585431', name:'Sprint 1 Qa Pruebas'},
+    {id:'901328136962', name:'Sprint 2 Corrección Bugs Qa'}
+  ],
+  '901318036212': [
+    {id:'901326848059', name:'Sprint 1 Modulo Cereales'}
+  ]
+};
+
+// Snapshot embebido (respaldo si el proxy no responde). Regenerable desde la API.
+const SNAPSHOT = {
+ "date": "2026-08-10",
+ "folders": {
+  "901317973248": [
+   {
+    "id": "901327585431",
+    "name": "Sprint 1 Qa Pruebas",
+    "parents": 59,
+    "subs": 608,
+    "buckets": {
+     "pendiente": {
+      "p": 58,
+      "s": 605
+     },
+     "curso": {
+      "p": 0,
+      "s": 0
+     },
+     "revision": {
+      "p": 1,
+      "s": 0
+     },
+     "qa": {
+      "p": 0,
+      "s": 0
+     },
+     "terminado": {
+      "p": 0,
+      "s": 3
+     }
+    }
+   },
+   {
+    "id": "901328136962",
+    "name": "Sprint 2 Corrección Bugs Qa",
+    "parents": 5,
+    "subs": 40,
+    "buckets": {
+     "pendiente": {
+      "p": 0,
+      "s": 4
+     },
+     "curso": {
+      "p": 0,
+      "s": 0
+     },
+     "revision": {
+      "p": 0,
+      "s": 0
+     },
+     "qa": {
+      "p": 5,
+      "s": 30
+     },
+     "terminado": {
+      "p": 0,
+      "s": 6
+     }
+    }
+   }
+  ],
+  "901316203875": [
+   {
+    "id": "901324230121",
+    "name": "Sprint 2 Modulo Contable",
+    "parents": 18,
+    "subs": 19,
+    "buckets": {
+     "pendiente": {
+      "p": 0,
+      "s": 0
+     },
+     "curso": {
+      "p": 0,
+      "s": 0
+     },
+     "revision": {
+      "p": 0,
+      "s": 0
+     },
+     "qa": {
+      "p": 1,
+      "s": 0
+     },
+     "terminado": {
+      "p": 17,
+      "s": 19
+     }
+    }
+   },
+   {
+    "id": "901324539845",
+    "name": "Sprint 3 Modulo Contable",
+    "parents": 19,
+    "subs": 20,
+    "buckets": {
+     "pendiente": {
+      "p": 0,
+      "s": 0
+     },
+     "curso": {
+      "p": 0,
+      "s": 0
+     },
+     "revision": {
+      "p": 0,
+      "s": 0
+     },
+     "qa": {
+      "p": 0,
+      "s": 0
+     },
+     "terminado": {
+      "p": 19,
+      "s": 20
+     }
+    }
+   },
+   {
+    "id": "901325316130",
+    "name": "Sprint 4 Modulo Contable",
+    "parents": 5,
+    "subs": 8,
+    "buckets": {
+     "pendiente": {
+      "p": 0,
+      "s": 0
+     },
+     "curso": {
+      "p": 0,
+      "s": 0
+     },
+     "revision": {
+      "p": 0,
+      "s": 0
+     },
+     "qa": {
+      "p": 0,
+      "s": 0
+     },
+     "terminado": {
+      "p": 5,
+      "s": 8
+     }
+    }
+   },
+   {
+    "id": "901326731539",
+    "name": "Sprint 5 Modulo Contable",
+    "parents": 12,
+    "subs": 23,
+    "buckets": {
+     "pendiente": {
+      "p": 0,
+      "s": 1
+     },
+     "curso": {
+      "p": 0,
+      "s": 0
+     },
+     "revision": {
+      "p": 0,
+      "s": 0
+     },
+     "qa": {
+      "p": 1,
+      "s": 0
+     },
+     "terminado": {
+      "p": 11,
+      "s": 22
+     }
+    }
+   },
+   {
+    "id": "901327168887",
+    "name": "Sprint 6 Modulo Contable",
+    "parents": 7,
+    "subs": 7,
+    "buckets": {
+     "pendiente": {
+      "p": 1,
+      "s": 0
+     },
+     "curso": {
+      "p": 0,
+      "s": 0
+     },
+     "revision": {
+      "p": 0,
+      "s": 0
+     },
+     "qa": {
+      "p": 0,
+      "s": 0
+     },
+     "terminado": {
+      "p": 6,
+      "s": 7
+     }
+    }
+   },
+   {
+    "id": "901327484231",
+    "name": "Sprint 7 Modulo Contable",
+    "parents": 2,
+    "subs": 10,
+    "buckets": {
+     "pendiente": {
+      "p": 0,
+      "s": 0
+     },
+     "curso": {
+      "p": 0,
+      "s": 0
+     },
+     "revision": {
+      "p": 0,
+      "s": 0
+     },
+     "qa": {
+      "p": 0,
+      "s": 0
+     },
+     "terminado": {
+      "p": 2,
+      "s": 10
+     }
+    }
+   },
+   {
+    "id": "901327759271",
+    "name": "Sprint 8 Modulo Contable",
+    "parents": 144,
+    "subs": 1180,
+    "buckets": {
+     "pendiente": {
+      "p": 85,
+      "s": 303
+     },
+     "curso": {
+      "p": 0,
+      "s": 21
+     },
+     "revision": {
+      "p": 7,
+      "s": 54
+     },
+     "qa": {
+      "p": 26,
+      "s": 133
+     },
+     "terminado": {
+      "p": 26,
+      "s": 669
+     }
+    }
+   },
+   {
+    "id": "901323690606",
+    "name": "Sprint 1 Modulo Contable",
+    "parents": 17,
+    "subs": 28,
+    "buckets": {
+     "pendiente": {
+      "p": 0,
+      "s": 3
+     },
+     "curso": {
+      "p": 0,
+      "s": 0
+     },
+     "revision": {
+      "p": 0,
+      "s": 0
+     },
+     "qa": {
+      "p": 0,
+      "s": 0
+     },
+     "terminado": {
+      "p": 17,
+      "s": 25
+     }
+    }
+   }
+  ],
+  "901318036212": [
+   {
+    "id": "901326848059",
+    "name": "Sprint 1 Modulo Cereales",
+    "parents": 130,
+    "subs": 0,
+    "buckets": {
+     "pendiente": {
+      "p": 130,
+      "s": 0
+     },
+     "curso": {
+      "p": 0,
+      "s": 0
+     },
+     "revision": {
+      "p": 0,
+      "s": 0
+     },
+     "qa": {
+      "p": 0,
+      "s": 0
+     },
+     "terminado": {
+      "p": 0,
+      "s": 0
+     }
+    }
+   }
+  ]
+ }
+};
+
+// Buckets de estado (normalizados a minúsculas y espacios colapsados)
+const BUCKETS = [
+  { key:'pendiente', label:'Pendiente / Reabierta', color:'#94a3b8',
+    statuses:['to do','a revisar','pendiente','reabiertas','reabierta','blockeado','bloqueado','bloqueado - rev-fun','bloqueado - rev -fun','bloqueado - rev. fun','blocked'] },
+  { key:'curso', label:'En curso', color:'#3b82f6',
+    statuses:['in progress','en curso'] },
+  { key:'revision', label:'En revisión', color:'#a855f7',
+    statuses:['review','listo para revision','listo pra revision','en revision','en qa','qa'] },
+  { key:'qa', label:'Listo para QA', color:'#f59e0b',
+    statuses:['waiting qa','listo para qa'] },
+  { key:'terminado', label:'Terminado / Cerrado', color:'#22c55e',
+    statuses:['done','closed','cerrado','terminado','complete','automation'] }
+];
+const BUCKET_OF = {};
+BUCKETS.forEach(b => b.statuses.forEach(s => BUCKET_OF[s] = b.key));
+
+function normStatus(s) { return String(s||'').toLowerCase().replace(/\s+/g,' ').trim(); }
+function bucketOf(s) { return BUCKET_OF[normStatus(s)] || 'pendiente'; }
+
+// ============================================================
+// STATE
+// ============================================================
+let DATA = [];          // [{cell, lists:[{id,name,parents,subs,buckets}], parents, subs, buckets, error}]
+let currentTab = 'celulas';
+let USED_SNAPSHOT = false;   // true si el proxy no respondió y se usó el snapshot embebido
+
+// ============================================================
+// FETCH
+// ============================================================
+async function jget(path) {
+  const r = await fetch(PROXY + path);
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+
+async function listsOfFolder(folderId) {
+  try {
+    const d = await jget(`/api/folder/${folderId}/list`);
+    if (d.lists && d.lists.length) {
+      return d.lists.filter(l => !l.archived).map(l => ({ id:l.id, name:l.name }));
+    }
+  } catch (e) { console.warn('folder', folderId, e); }
+  return FALLBACK_LISTS[folderId] || [];
+}
+
+async function tasksOfList(listId) {
+  const out = [];
+  for (let page = 0; page < 60; page++) {
+    const d = await jget(`/api/tasks?list_id=${listId}&include_closed=true&subtasks=true&page=${page}`);
+    if (!d.tasks) break;
+    out.push(...d.tasks);
+    if (d.last_page) break;              // cortar por last_page, no por length<100
+    if (d.tasks.length === 0) break;
+  }
+  return out;
+}
+
+function emptyBuckets() {
+  const o = {};
+  BUCKETS.forEach(b => o[b.key] = { p:0, s:0 });
+  return o;
+}
+
+async function loadCell(cell) {
+  const res = { cell, lists:[], parents:0, subs:0, buckets:emptyBuckets(), error:null };
+  if (!cell.space) return res;
+
+  let lists = [...cell.lists];
+  for (const f of cell.folders) lists.push(...await listsOfFolder(f));
+  // ordenar por número de sprint si lo tiene
+  lists.sort((a,b) => {
+    const na = parseInt((a.name.match(/\d+/) || ['0'])[0]);
+    const nb = parseInt((b.name.match(/\d+/) || ['0'])[0]);
+    return na - nb;
+  });
+
+  for (const l of lists) {
+    try {
+      const tasks = await tasksOfList(l.id);
+      const row = { id:l.id, name:l.name, parents:0, subs:0, buckets:emptyBuckets() };
+      for (const t of tasks) {
+        const isSub = !!t.parent;
+        const bk = bucketOf(t.status && t.status.status);
+        if (isSub) { row.subs++; row.buckets[bk].s++; }
+        else       { row.parents++; row.buckets[bk].p++; }
+      }
+      res.lists.push(row);
+      res.parents += row.parents;
+      res.subs    += row.subs;
+      BUCKETS.forEach(b => { res.buckets[b.key].p += row.buckets[b.key].p; res.buckets[b.key].s += row.buckets[b.key].s; });
+    } catch (e) {
+      res.error = (res.error ? res.error + ' · ' : '') + `${l.name}: ${e.message}`;
+    }
+  }
+
+  // Respaldo: si el proxy no devolvió nada (token del worker vencido, caída, etc.)
+  // se usan los números del snapshot embebido para que el panel siga siendo legible.
+  if (res.parents + res.subs === 0) {
+    const rows = cell.folders.flatMap(f => SNAPSHOT.folders[f] || []);
+    if (rows.length) {
+      USED_SNAPSHOT = true;
+      res.fromSnapshot = true;
+      res.error = null;
+      res.lists = rows.map(r => JSON.parse(JSON.stringify(r)))
+        .sort((a,b) => parseInt((a.name.match(/\d+/)||['0'])[0]) - parseInt((b.name.match(/\d+/)||['0'])[0]));
+      res.parents = res.lists.reduce((a,r) => a + r.parents, 0);
+      res.subs    = res.lists.reduce((a,r) => a + r.subs, 0);
+      res.buckets = emptyBuckets();
+      for (const r of res.lists) BUCKETS.forEach(b => { res.buckets[b.key].p += r.buckets[b.key].p; res.buckets[b.key].s += r.buckets[b.key].s; });
+    }
+  }
+  return res;
+}
+
+async function loadAll() {
+  document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div>Cargando datos de ClickUp…</div>';
+  DATA = [];
+  USED_SNAPSHOT = false;
+  for (const c of CELLS) DATA.push(await loadCell(c));
+  document.getElementById('lastUpdated').textContent = USED_SNAPSHOT
+    ? `⚠ Snapshot del ${SNAPSHOT.date} (proxy sin responder)`
+    : 'Actualizado ' + new Date().toLocaleString('es-AR');
+  render();
+}
+
+// ============================================================
+// HELPERS
+// ============================================================
+const fmt = n => n.toLocaleString('es-AR');
+function total(r) { return r.parents + r.subs; }
+function baseline() { return DATA.find(r => r.cell.baseline) || { parents:0, subs:0, lists:[] }; }
+function doneOf(r) { return r.buckets.terminado.p + r.buckets.terminado.s; }
+function pctDone(r) { const t = total(r); return t ? Math.round(doneOf(r) * 100 / t) : 0; }
+
+function memberChips(ids) {
+  return ids.map(id => {
+    const p = PEOPLE[id] || { name:'?', short:'?', hex:'#666' };
+    return `<span class="member"><span class="av" style="background:${p.hex}">${p.short}</span>${p.name}</span>`;
+  }).join('');
+}
+
+function bucketBar(r) {
+  const t = total(r);
+  if (!t) return '<div class="bar"></div>';
+  const segs = BUCKETS.map(b => {
+    const v = r.buckets[b.key].p + r.buckets[b.key].s;
+    return v ? `<div class="bar-seg" style="width:${v*100/t}%;background:${b.color}" title="${b.label}: ${v}"></div>` : '';
+  }).join('');
+  const leg = BUCKETS.map(b => {
+    const v = r.buckets[b.key].p + r.buckets[b.key].s;
+    return v ? `<span class="lg"><span class="dot" style="background:${b.color}"></span>${b.label} <b>${fmt(v)}</b></span>` : '';
+  }).join('');
+  return `<div class="bar">${segs}</div><div class="bar-legend">${leg}</div>`;
+}
+
+// ============================================================
+// RENDER — Células
+// ============================================================
+function renderTotalizers() {
+  const base = baseline();
+  const real = DATA.filter(r => r.cell.space && !r.cell.qa);
+  const P = real.reduce((a,r) => a + r.parents, 0);
+  const S = real.reduce((a,r) => a + r.subs, 0);
+  const done = real.reduce((a,r) => a + doneOf(r), 0);
+  const sprints = real.reduce((a,r) => a + r.lists.length, 0);
+  const activas = DATA.filter(r => r.cell.space).length;
+  const pend = CELLS.filter(c => !c.space && !c.qa).length;
+
+  const cards = [
+    { lbl:'Células', val:CELLS.length - 1 + ' + QA', sub:`${activas} con backlog · ${pend} sin space` },
+    { lbl:'Total del programa', val:fmt(P + S), sub:`${fmt(P)} tareas · ${fmt(S)} subtareas`, ps:[['P',P],['S',S]] },
+    { lbl:'Baseline Contable', val:fmt(base.parents + base.subs), sub:`${base.lists.length} sprints · referencia`, ps:[['P',base.parents],['S',base.subs]] },
+    { lbl:'Terminado / cerrado', val:fmt(done), sub:`${P+S ? Math.round(done*100/(P+S)) : 0}% del total cargado` },
+    { lbl:'Sprints cargados', val:fmt(sprints), sub:'listas activas en ClickUp' }
+  ];
+  document.getElementById('totalizers').innerHTML = cards.map(c => `
+    <div class="tot-card">
+      <div class="tot-label">${c.lbl}</div>
+      <div class="tot-row">
+        <div class="tot-value">${c.val}</div>
+        ${c.ps ? `<div class="tot-ps">${c.ps.map(([l,v]) => `<span><span class="lbl">${l}</span>${fmt(v)}</span>`).join('')}</div>` : ''}
+      </div>
+      <div class="tot-sub">${c.sub}</div>
+    </div>`).join('');
+}
+
+function cellCard(r) {
+  const c = r.cell;
+  const base = baseline();
+  const has = !!c.space;
+  const t = total(r);
+  const ratio = r.parents ? (r.subs / r.parents).toFixed(1) : '—';
+
+  const vsP = base.parents ? Math.round(r.parents * 100 / base.parents) : 0;
+  const vsS = base.subs ? Math.round(r.subs * 100 / base.subs) : 0;
+  const vsT = (base.parents + base.subs) ? Math.round(t * 100 / (base.parents + base.subs)) : 0;
+
+  const vs = (c.baseline || !has) ? '' : `
+    <div class="vs-box">
+      <div class="vs-title">Volumen vs Módulo Contable (baseline)</div>
+      ${[['Tareas',vsP,r.parents,base.parents],['Subtareas',vsS,r.subs,base.subs],['Total',vsT,t,base.parents+base.subs]].map(([l,p,v,b]) => `
+        <div class="vs-row">
+          <span class="vs-lbl">${l}</span>
+          <span class="vs-track"><span class="vs-fill" style="width:${Math.min(p,100)}%;background:${c.hex}"></span></span>
+          <span class="vs-pct">${p}% <span style="color:var(--text-muted);font-weight:400">(${fmt(v)}/${fmt(b)})</span></span>
+        </div>`).join('')}
+    </div>`;
+
+  const sprints = r.lists.length ? `
+    <div class="sprint-list">
+      ${r.lists.map(l => `<div class="sprint-row">
+        <span class="sp-name">${l.name}</span>
+        <span class="sp-n">P <b>${fmt(l.parents)}</b></span>
+        <span class="sp-n">S <b>${fmt(l.subs)}</b></span>
+      </div>`).join('')}
+    </div>` : '';
+
+  let note = '';
+  if (c.qa) note = `<div class="note">Célula transversal: valida <b>todos</b> los módulos cuando las células de desarrollo entregan. Su carga es la suma de lo que las demás células ponen en <b>Listo para QA</b> / <b>En revisión</b>.</div>`;
+  else if (!has) note = `<div class="note">Sin space en ClickUp todavía. Apenas se cree el space del módulo <b>${c.module}</b>, agregar su id en <code>CELLS</code> y el panel lo levanta solo.</div>`;
+
+  let qaLoad = '';
+  if (c.qa) {
+    const real = DATA.filter(x => x.cell.space && !x.cell.qa);
+    const enQA = real.reduce((a,x) => a + x.buckets.qa.p + x.buckets.qa.s + x.buckets.revision.p + x.buckets.revision.s, 0);
+    const cerr = real.reduce((a,x) => a + doneOf(x), 0);
+    qaLoad = `<div class="nums">
+      <div class="num-box"><div class="n">${fmt(enQA)}</div><div class="l">En cola de QA</div></div>
+      <div class="num-box"><div class="n">${fmt(cerr)}</div><div class="l">Ya validado</div></div>
+      <div class="num-box"><div class="n">${real.length}</div><div class="l">Módulos a cargo</div></div>
+    </div>`;
+  }
+
+  return `
+  <div class="cell-card ${c.qa?'qa':''} ${has||c.qa?'':'pending'}">
+    <div class="cell-header">
+      <div class="cell-num" style="background:${c.hex}">${c.n}</div>
+      <div class="cell-title">
+        <div class="mod">${c.module}${c.baseline?' <span class="tag" style="background:rgba(99,102,241,.2);color:#a5b4fc">baseline</span>':''}</div>
+        <div class="sub">${c.url ? `<a class="link" href="${c.url}" target="_blank">${c.spaceName}</a>` : c.spaceName}</div>
+      </div>
+    </div>
+    <div class="cell-body">
+      <div class="members">${memberChips(c.members)}</div>
+      ${c.qa ? qaLoad : `
+      <div class="nums">
+        <div class="num-box"><div class="n">${fmt(r.parents)}</div><div class="l">Tareas</div></div>
+        <div class="num-box"><div class="n">${fmt(r.subs)}</div><div class="l">Subtareas</div></div>
+        <div class="num-box"><div class="n">${r.lists.length}</div><div class="l">Sprints</div></div>
+      </div>
+      ${t ? `<div><div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">Avance — ${pctDone(r)}% terminado · ratio ${ratio} subtareas por tarea</div>${bucketBar(r)}</div>` : ''}
+      ${vs}
+      ${sprints}`}
+      ${note}
+      ${r.error ? `<div class="err">Error parcial: ${r.error}</div>` : ''}
+    </div>
+  </div>`;
+}
+
+function renderCelulas() {
+  return `<div class="cells-grid">${DATA.map(cellCard).join('')}</div>`;
+}
+
+// ============================================================
+// RENDER — Comparativa
+// ============================================================
+function renderComparativa() {
+  const base = baseline();
+  const baseT = base.parents + base.subs || 1;
+  const rows = DATA.filter(r => r.cell.space);
+  const max = Math.max(...rows.map(total), 1);
+
+  const chart = `
+  <div class="chart-card">
+    <h2>Volumen de trabajo por módulo</h2>
+    <div class="hint">Barra proporcional al total de tarjetas (tareas + subtareas). El Módulo Contable es la referencia: ${fmt(base.parents)} tareas y ${fmt(base.subs)} subtareas en ${base.lists.length} sprints.</div>
+    ${rows.map(r => {
+      const t = total(r);
+      const w = t * 100 / max;
+      const pw = t ? r.parents * 100 / t : 0;
+      return `<div class="hbar-row">
+        <div class="hbar-lbl"><span class="sq" style="background:${r.cell.hex}"></span>${r.cell.module}</div>
+        <div class="hbar-outer">
+          <div class="hbar-track" style="width:${w}%">
+            <div class="hbar-p" style="width:${pw}%;background:${r.cell.hex}">${r.parents ? fmt(r.parents) : ''}</div>
+            <div class="hbar-s" style="width:${100-pw}%;background:${r.cell.hex}66;color:var(--text)">${r.subs ? fmt(r.subs) : ''}</div>
+          </div>
+        </div>
+        <div class="hbar-val"><b>${fmt(t)}</b> · ${Math.round(t*100/baseT)}% del Contable</div>
+      </div>`;
+    }).join('')}
+    <div class="bar-legend" style="margin-top:14px">
+      <span class="lg"><span class="dot" style="background:#6366f1"></span>Tareas padre (color pleno)</span>
+      <span class="lg"><span class="dot" style="background:#6366f166"></span>Subtareas (color claro)</span>
+    </div>
+  </div>`;
+
+  const head = `<tr>
+    <th>Célula</th><th>Módulo</th><th>Integrantes</th>
+    <th class="num">Sprints</th><th class="num">Tareas</th><th class="num">Subtareas</th><th class="num">Total</th>
+    <th class="num">Subt/Tarea</th><th class="num">% vs Contable</th><th class="num">Terminado</th><th class="num">% avance</th>
+  </tr>`;
+
+  const body = DATA.map(r => {
+    const c = r.cell;
+    const t = total(r);
+    if (c.qa) {
+      const real = DATA.filter(x => x.cell.space && !x.cell.qa);
+      const enQA = real.reduce((a,x) => a + x.buckets.qa.p + x.buckets.qa.s + x.buckets.revision.p + x.buckets.revision.s, 0);
+      return `<tr><td>QA</td><td>${c.module}</td><td>${c.members.map(i=>PEOPLE[i].name).join(', ')}</td>
+        <td class="num" colspan="8" style="color:var(--text-muted)">Transversal — ${fmt(enQA)} tarjetas hoy en cola de revisión/QA sobre ${real.length} módulos</td></tr>`;
+    }
+    if (!c.space) {
+      return `<tr><td>${c.n}</td><td>${c.module}</td><td>${c.members.map(i=>PEOPLE[i].name).join(', ')}</td>
+        <td class="num" colspan="8" style="color:var(--text-muted)">Sin space en ClickUp — backlog no cargado</td></tr>`;
+    }
+    return `<tr class="${c.baseline?'baseline':''}">
+      <td>${c.n}</td><td>${c.module}</td><td>${c.members.map(i=>PEOPLE[i].name).join(', ')}</td>
+      <td class="num">${r.lists.length}</td>
+      <td class="num">${fmt(r.parents)}</td>
+      <td class="num">${fmt(r.subs)}</td>
+      <td class="num">${fmt(t)}</td>
+      <td class="num">${r.parents ? (r.subs/r.parents).toFixed(1) : '—'}</td>
+      <td class="num">${Math.round(t*100/baseT)}%</td>
+      <td class="num">${fmt(doneOf(r))}</td>
+      <td class="num">${pctDone(r)}%</td>
+    </tr>`;
+  }).join('');
+
+  const real = DATA.filter(r => r.cell.space && !r.cell.qa);
+  const tp = real.reduce((a,r)=>a+r.parents,0), ts = real.reduce((a,r)=>a+r.subs,0), td = real.reduce((a,r)=>a+doneOf(r),0);
+  const foot = `<tr class="tot"><td colspan="3">TOTAL con backlog cargado</td>
+    <td class="num">${real.reduce((a,r)=>a+r.lists.length,0)}</td>
+    <td class="num">${fmt(tp)}</td><td class="num">${fmt(ts)}</td><td class="num">${fmt(tp+ts)}</td>
+    <td class="num">${tp ? (ts/tp).toFixed(1) : '—'}</td><td class="num">—</td>
+    <td class="num">${fmt(td)}</td><td class="num">${tp+ts ? Math.round(td*100/(tp+ts)) : 0}%</td></tr>`;
+
+  return chart + `<div class="table-wrap"><table>${head}${body}${foot}</table></div>`;
+}
+
+// ============================================================
+// RENDER — Detalle por sprint
+// ============================================================
+function renderDetalle() {
+  const rows = DATA.filter(r => r.cell.space);
+  if (!rows.length) return '<div class="note">No hay módulos con backlog cargado.</div>';
+  return rows.map(r => `
+    <div class="section-title"><span class="sq" style="display:inline-block;width:11px;height:11px;border-radius:3px;background:${r.cell.hex}"></span>
+      Célula ${r.cell.n} — ${r.cell.module}
+      <span class="cnt">${r.lists.length} sprints · ${fmt(r.parents)} tareas · ${fmt(r.subs)} subtareas</span>
+    </div>
+    <div class="table-wrap"><table>
+      <tr><th>Sprint / Lista</th><th class="num">Tareas</th><th class="num">Subtareas</th><th class="num">Total</th>
+      ${BUCKETS.map(b=>`<th class="num">${b.label}</th>`).join('')}</tr>
+      ${r.lists.map(l => `<tr>
+        <td>${l.name}</td>
+        <td class="num">${fmt(l.parents)}</td><td class="num">${fmt(l.subs)}</td><td class="num">${fmt(l.parents+l.subs)}</td>
+        ${BUCKETS.map(b=>{const v=l.buckets[b.key].p+l.buckets[b.key].s; return `<td class="num" style="${v?`color:${b.color};font-weight:600`:'color:var(--text-muted)'}">${v?fmt(v):'—'}</td>`;}).join('')}
+      </tr>`).join('')}
+      <tr class="tot"><td>TOTAL ${r.cell.module}</td>
+        <td class="num">${fmt(r.parents)}</td><td class="num">${fmt(r.subs)}</td><td class="num">${fmt(total(r))}</td>
+        ${BUCKETS.map(b=>{const v=r.buckets[b.key].p+r.buckets[b.key].s; return `<td class="num">${v?fmt(v):'—'}</td>`;}).join('')}
+      </tr>
+    </table></div>`).join('');
+}
+
+// ============================================================
+// RENDER dispatcher
+// ============================================================
+function render() {
+  renderTotalizers();
+  const el = document.getElementById('content');
+  const banner = USED_SNAPSHOT
+    ? `<div class="err">El proxy de ClickUp no está devolviendo datos (token del worker vencido). Se muestran los números del <b>snapshot del ${SNAPSHOT.date}</b>. Al renovar el secret <code>CLICKUP_API_TOKEN</code> del worker, el panel vuelve a actualizarse solo.</div>`
+    : '';
+  if (currentTab === 'celulas')     el.innerHTML = banner + renderCelulas();
+  else if (currentTab === 'comparativa') el.innerHTML = banner + renderComparativa();
+  else                              el.innerHTML = banner + renderDetalle();
+}
+
+// ============================================================
+// EXPORT CSV
+// ============================================================
+function exportCsv() {
+  const base = baseline();
+  const baseT = base.parents + base.subs || 1;
+  const lines = [['Celula','Modulo','Integrantes','Sprint','Tareas','Subtareas','Total','% vs Contable','Terminado'].join(';')];
+  for (const r of DATA) {
+    const nm = r.cell.members.map(i => PEOPLE[i].name).join(' / ');
+    if (!r.cell.space) { lines.push([r.cell.n, r.cell.module, nm, '', '', '', '', '', ''].join(';')); continue; }
+    for (const l of r.lists) {
+      lines.push([r.cell.n, r.cell.module, nm, l.name, l.parents, l.subs, l.parents+l.subs, '', ''].join(';'));
+    }
+    lines.push([r.cell.n, r.cell.module + ' (TOTAL)', nm, '', r.parents, r.subs, total(r),
+      Math.round(total(r)*100/baseT) + '%', doneOf(r)].join(';'));
+  }
+  const blob = new Blob(['﻿' + lines.join('\n')], { type:'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'panel-celulas-' + new Date().toISOString().slice(0,10) + '.csv';
+  a.click();
+}
+
+// ============================================================
+// EVENTS
+// ============================================================
+document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
+  document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+  t.classList.add('active');
+  currentTab = t.dataset.tab;
+  render();
+}));
+document.getElementById('refreshBtn').addEventListener('click', loadAll);
+document.getElementById('exportCsvBtn').addEventListener('click', exportCsv);
+
+loadAll();
+setInterval(loadAll, 5 * 60 * 1000);
+</script>
+</body>
+</html>
