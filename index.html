@@ -806,8 +806,8 @@ function qaStats() {
     out.validado += q.validado; out.reabiertas += q.reabiertas;
     for (const l of r.lists) {
       const lq = Object.assign(emptyQa(), l.qa);
-      if (lq.cola || lq.porCaer)
-        out.porLista.push({ module:r.cell.module, name:l.name, ...lq });
+      // Sólo lo asignado a QA: si no está a nombre de Lorena o Laura, no suma.
+      if (lq.cola) out.porLista.push({ module:r.cell.module, name:l.name, ...lq });
     }
   }
   out.porLista.sort((a,b) => (b.cola - a.cola) || (b.porCaer - a.porCaer));
@@ -916,7 +916,7 @@ function cellCard(r) {
     </div>` : '';
 
   let note = '';
-  if (c.qa) note = `<div class="note">Célula transversal: valida <b>todos</b> los módulos. QA trabaja únicamente en <b>Listo para QA</b> y <b>En QA</b>; pendiente, en curso, bloqueado, en revisión y reabierta son estados de los devs. Cada tarjeta suma al módulo de quien la tiene asignada.</div>`;
+  if (c.qa) note = `<div class="note">Célula transversal: valida <b>todos</b> los módulos. QA trabaja únicamente en <b>Listo para QA</b> y <b>En QA</b>, y sólo suma lo que está <b>asignado a Lorena o a Laura Mignanelli</b>: si la tarjeta no está a nombre de ellas, no cuenta. Pendiente, en curso, bloqueado, en revisión y reabierta son estados de los devs.</div>`;
   else if (!has) note = `<div class="note">Sin space en ClickUp todavía. Apenas se cree el space del módulo <b>${c.module}</b>, agregar su id en <code>CELLS</code> y el panel lo levanta solo.</div>`;
 
   let qaLoad = '';
@@ -924,17 +924,16 @@ function cellCard(r) {
     const q = qaStats();
     qaLoad = `<div class="nums">
       <div class="num-box"><div class="n">${fmt(q.cola)}</div><div class="l">A probar por QA</div></div>
-      <div class="num-box"><div class="n">${fmt(q.porCaer)}</div><div class="l">En estado QA sin asignar</div></div>
       <div class="num-box"><div class="n">${fmt(q.validado)}</div><div class="l">Ya validado</div></div>
+      <div class="num-box"><div class="n">${q.modulos}</div><div class="l">Módulos a cargo</div></div>
     </div>
     <div class="sprint-list">
       ${q.porLista.length
         ? q.porLista.map(x => `<div class="sprint-row">
             <span class="sp-name">${x.module} · ${x.name}</span>
-            <span class="sp-n">nuestras <b>${fmt(x.cola)}</b></span>
-            <span class="sp-n">sin asignar <b>${fmt(x.porCaer)}</b></span>
+            <span class="sp-n">a probar <b>${fmt(x.cola)}</b></span>
           </div>`).join('')
-        : `<div class="sprint-row"><span class="sp-name">Sin nada en Listo para QA / En QA en este momento</span></div>`}
+        : `<div class="sprint-row"><span class="sp-name">Sin nada asignado a QA en Listo para QA / En QA</span></div>`}
     </div>`;
   }
 
@@ -1016,7 +1015,7 @@ function renderComparativa() {
       const q = qaStats();
       const donde = q.porLista.filter(x => x.cola > 0).map(x => `${x.module} · ${x.name} (${fmt(x.cola)})`).join(' · ') || 'sin pendientes';
       return `<tr><td>QA</td><td>${c.module}</td><td>${c.members.map(i=>PEOPLE[i].name).join(', ')}</td>
-        <td class="num" colspan="8" style="color:var(--text-muted)">Transversal — ${fmt(q.cola)} a probar (Listo para QA / En QA, asignadas a QA) · ${fmt(q.porCaer)} en estado QA sin asignar · ${fmt(q.validado)} validadas → ${donde}</td></tr>`;
+        <td class="num" colspan="8" style="color:var(--text-muted)">Transversal — ${fmt(q.cola)} a probar (Listo para QA / En QA asignadas a QA) · ${fmt(q.validado)} validadas → ${donde}</td></tr>`;
     }
     if (!c.space) {
       return `<tr><td>${c.n}</td><td>${c.module}</td><td>${c.members.map(i=>PEOPLE[i].name).join(', ')}</td>
