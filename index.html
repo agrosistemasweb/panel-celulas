@@ -180,11 +180,13 @@ const CELLS = [
     url:'https://app.clickup.com/9013241237/v/o/s/901313732567',
     folders:['901317973248'], lists:[], members:[87928772, 89102522] },
 
-  { n:2, module:'Fletes',   hex:'#06b6d4', space:null, spaceName:'— sin space en ClickUp —',
-    url:null, folders:[], lists:[], members:[120292638, 82082258] },
+  { n:2, module:'Fletes',   hex:'#06b6d4', space:'901313967832', spaceName:'QA - Modulo Fletes',
+    url:'https://app.clickup.com/9013241237/v/o/s/901313967832',
+    folders:['901318743353'], lists:[], members:[120292638, 82082258] },
 
-  { n:3, module:'Sueldos',  hex:'#f59e0b', space:null, spaceName:'— sin space en ClickUp —',
-    url:null, folders:[], lists:[], members:[90708484, 82082180] },
+  { n:3, module:'Sueldos',  hex:'#f59e0b', space:'901313967858', spaceName:'QA - Modulo Sueldos',
+    url:'https://app.clickup.com/9013241237/v/o/s/901313967858',
+    folders:['901318743397'], lists:[], members:[90708484, 82082180] },
 
   { n:4, module:'Contable', hex:'#6366f1', space:'901312454479', spaceName:'Modulo Contable App',
     url:'https://app.clickup.com/9013241237/v/o/s/901312454479',
@@ -217,6 +219,12 @@ const FALLBACK_LISTS = {
   ],
   '901318036212': [
     {id:'901326848059', name:'Sprint 1 Modulo Cereales'}
+  ],
+  '901318743353': [
+    {id:'901328139800', name:'Sprint 1 (8/10-8/23)'}
+  ],
+  '901318743397': [
+    {id:'901328139852', name:'Sprint 1 (8/10-8/23)'}
   ]
 };
 
@@ -543,8 +551,11 @@ const SNAPSHOT = {
 
 // Buckets de estado (normalizados a minúsculas y espacios colapsados)
 const BUCKETS = [
-  { key:'pendiente', label:'Pendiente / Reabierta', color:'#94a3b8',
-    statuses:['to do','a revisar','pendiente','reabiertas','reabierta','blockeado','bloqueado','bloqueado - rev-fun','bloqueado - rev -fun','bloqueado - rev. fun','blocked'] },
+  { key:'pendiente', label:'Pendiente / Bloqueada', color:'#94a3b8',
+    statuses:['to do','a revisar','pendiente','blockeado','bloqueado','bloqueado - rev-fun','bloqueado - rev -fun','bloqueado - rev. fun','blocked'] },
+  // "Reabierta" NO es trabajo de QA: el bug ya se pasó a los devs y queda asignado a ellos.
+  { key:'reabierta', label:'Reabierta (en devs)', color:'#f97316',
+    statuses:['reabiertas','reabierta','reopened'] },
   { key:'curso', label:'En curso', color:'#3b82f6',
     statuses:['in progress','en curso'] },
   { key:'revision', label:'En revisión', color:'#a855f7',
@@ -586,14 +597,32 @@ async function listsOfFolder(folderId) {
   return FALLBACK_LISTS[folderId] || [];
 }
 
+// Paginación en bloques paralelos: cada página del proxy tarda 2-4s, y Sprint 8
+// del Contable tiene ~14 páginas. En serie eso son ~40s sólo para esa lista.
+const PAGE_CHUNK = 6;
+
+function pageUrl(listId, page) {
+  return `/api/tasks?list_id=${listId}&include_closed=true&subtasks=true&page=${page}`;
+}
+
 async function tasksOfList(listId) {
-  const out = [];
-  for (let page = 0; page < 60; page++) {
-    const d = await jget(`/api/tasks?list_id=${listId}&include_closed=true&subtasks=true&page=${page}`);
-    if (!d.tasks) break;
-    out.push(...d.tasks);
-    if (d.last_page) break;              // cortar por last_page, no por length<100
-    if (d.tasks.length === 0) break;
+  const first = await jget(pageUrl(listId, 0));
+  if (!first.tasks) return [];
+  const out = [...first.tasks];
+  if (first.last_page || first.tasks.length === 0) return out;
+
+  let page = 1;
+  while (page < 60) {
+    const batch = [];
+    for (let i = 0; i < PAGE_CHUNK && page < 60; i++, page++) batch.push(page);
+    const res = await Promise.all(batch.map(p => jget(pageUrl(listId, p)).catch(() => null)));
+    let stop = false;
+    for (const d of res) {
+      if (!d || !d.tasks) { stop = true; continue; }
+      out.push(...d.tasks);
+      if (d.last_page || d.tasks.length === 0) stop = true;   // cortar por last_page
+    }
+    if (stop) break;
   }
   return out;
 }
@@ -604,8 +633,20 @@ function emptyBuckets() {
   return o;
 }
 
+// El snapshot embebido y las cachés viejas pueden no tener todos los buckets.
+function normBuckets(b) {
+  const o = emptyBuckets();
+  if (b) for (const k in o) if (b[k]) o[k] = { p:b[k].p||0, s:b[k].s||0 };
+  return o;
+}
+
+// Carga real de QA: tarjetas asignadas a Lorena / Laura Mignanelli.
+// "Reabierta" queda afuera de la cola porque ya está en manos de los devs.
+const QA_MEMBER_IDS = new Set([174607180, 118075668]);
+function emptyQa() { return { cola:0, validado:0, reabiertas:0 }; }
+
 async function loadCell(cell) {
-  const res = { cell, lists:[], parents:0, subs:0, buckets:emptyBuckets(), error:null };
+  const res = { cell, lists:[], parents:0, subs:0, buckets:emptyBuckets(), qa:emptyQa(), error:null };
   if (!cell.space) return res;
 
   let lists = [...cell.lists];
@@ -619,18 +660,25 @@ async function loadCell(cell) {
 
   // Las listas se piden en paralelo: en serie el panel tardaba ~90s por la paginación
   // de Sprint 8 (1.3k tarjetas) y Sprint 1 de Insumos.
+  let failed = 0;
   const rows = await Promise.all(lists.map(async l => {
     try {
       const tasks = await tasksOfList(l.id);
-      const row = { id:l.id, name:l.name, parents:0, subs:0, buckets:emptyBuckets() };
+      const row = { id:l.id, name:l.name, parents:0, subs:0, buckets:emptyBuckets(), qa:emptyQa() };
       for (const t of tasks) {
         const isSub = !!t.parent;
         const bk = bucketOf(t.status && t.status.status);
         if (isSub) { row.subs++; row.buckets[bk].s++; }
         else       { row.parents++; row.buckets[bk].p++; }
+        if ((t.assignees || []).some(a => QA_MEMBER_IDS.has(Number(a.id)))) {
+          if (bk === 'reabierta')      row.qa.reabiertas++;
+          else if (bk === 'terminado') row.qa.validado++;
+          else                         row.qa.cola++;
+        }
       }
       return row;
     } catch (e) {
+      failed++;
       res.error = (res.error ? res.error + ' · ' : '') + `${l.name}: ${e.message}`;
       return null;
     }
@@ -641,11 +689,15 @@ async function loadCell(cell) {
     res.parents += row.parents;
     res.subs    += row.subs;
     BUCKETS.forEach(b => { res.buckets[b.key].p += row.buckets[b.key].p; res.buckets[b.key].s += row.buckets[b.key].s; });
+    res.qa.cola       += row.qa.cola;
+    res.qa.validado   += row.qa.validado;
+    res.qa.reabiertas += row.qa.reabiertas;
   }
 
-  // Respaldo: si el proxy no devolvió nada (token del worker vencido, caída, etc.)
-  // se usan los números del snapshot embebido para que el panel siga siendo legible.
-  if (res.parents + res.subs === 0) {
+  // Respaldo: sólo si el proxy FALLÓ (token vencido, caída, CORS).
+  // Un módulo que legítimamente devuelve 0 tarjetas no debe disparar el snapshot:
+  // eso hacía aparecer el cartel de "token vencido" con el proxy funcionando.
+  if (res.parents + res.subs === 0 && (failed > 0 || lists.length === 0)) {
     const rows = cell.folders.flatMap(f => SNAPSHOT.folders[f] || []);
     if (rows.length) {
       USED_SNAPSHOT = true;
@@ -653,23 +705,69 @@ async function loadCell(cell) {
       res.error = null;
       res.lists = rows.map(r => JSON.parse(JSON.stringify(r)))
         .sort((a,b) => parseInt((a.name.match(/\d+/)||['0'])[0]) - parseInt((b.name.match(/\d+/)||['0'])[0]));
+      res.lists.forEach(r => { r.buckets = normBuckets(r.buckets); r.qa = r.qa || emptyQa(); });
       res.parents = res.lists.reduce((a,r) => a + r.parents, 0);
       res.subs    = res.lists.reduce((a,r) => a + r.subs, 0);
       res.buckets = emptyBuckets();
+      res.qa = emptyQa();
       for (const r of res.lists) BUCKETS.forEach(b => { res.buckets[b.key].p += r.buckets[b.key].p; res.buckets[b.key].s += r.buckets[b.key].s; });
     }
   }
   return res;
 }
 
-async function loadAll() {
-  document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div>Cargando datos de ClickUp…</div>';
+// ---- Caché local: la primera pintura es instantánea y la API se refresca detrás
+const CACHE_KEY = 'panelCelulas.v2';
+const CACHE_TTL = 15 * 60 * 1000;
+
+function emptyRow(cell) {
+  return { cell, lists:[], parents:0, subs:0, buckets:emptyBuckets(), qa:emptyQa(), error:null };
+}
+
+function saveCache() {
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify({
+      ts: Date.now(),
+      cells: DATA.map(r => ({ module:r.cell.module, lists:r.lists, parents:r.parents,
+                              subs:r.subs, buckets:r.buckets, qa:r.qa, fromSnapshot:!!r.fromSnapshot }))
+    }));
+  } catch (e) { console.warn('cache save', e); }
+}
+
+function readCache() {
+  try {
+    const c = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
+    if (!c || !c.cells || Date.now() - c.ts > CACHE_TTL) return null;
+    return c;
+  } catch (e) { return null; }
+}
+
+async function loadAll(opts) {
+  const background = !!(opts && opts.background);
   USED_SNAPSHOT = false;
-  DATA = await Promise.all(CELLS.map(loadCell));
+  if (!background) {
+    // placeholders + render incremental: cada célula aparece en cuanto termina,
+    // en lugar de esperar a la más lenta (Contable Sprint 8).
+    DATA = CELLS.map(emptyRow);
+    document.getElementById('lastUpdated').textContent = 'Cargando datos de ClickUp…';
+    render();
+  } else {
+    document.getElementById('lastUpdated').textContent += ' · actualizando…';
+  }
+
+  const results = new Array(CELLS.length);
+  await Promise.all(CELLS.map(async (c, i) => {
+    const res = await loadCell(c);
+    results[i] = res;
+    if (!background) { DATA[i] = res; render(); }
+  }));
+
+  DATA = results;
   document.getElementById('lastUpdated').textContent = USED_SNAPSHOT
     ? `⚠ Snapshot del ${SNAPSHOT.date} (proxy sin responder)`
     : 'Actualizado ' + new Date().toLocaleString('es-AR');
   render();
+  if (!USED_SNAPSHOT) saveCache();
 }
 
 // ============================================================
@@ -678,6 +776,23 @@ async function loadAll() {
 const fmt = n => n.toLocaleString('es-AR');
 function total(r) { return r.parents + r.subs; }
 function baseline() { return DATA.find(r => r.cell.baseline) || { parents:0, subs:0, lists:[] }; }
+
+// Carga de la célula QA: sólo tarjetas asignadas a QA, sin las reabiertas (esas ya están en devs)
+function qaStats() {
+  const real = DATA.filter(r => r.cell.space && !r.cell.qa);
+  const out = { cola:0, validado:0, reabiertas:0, modulos:real.length, porLista:[] };
+  for (const r of real) {
+    const q = r.qa || emptyQa();
+    out.cola += q.cola; out.validado += q.validado; out.reabiertas += q.reabiertas;
+    for (const l of r.lists) {
+      const lq = l.qa || emptyQa();
+      if (lq.cola || lq.validado || lq.reabiertas)
+        out.porLista.push({ module:r.cell.module, name:l.name, ...lq });
+    }
+  }
+  out.porLista.sort((a,b) => b.cola - a.cola);
+  return out;
+}
 function doneOf(r) { return r.buckets.terminado.p + r.buckets.terminado.s; }
 function pctDone(r) { const t = total(r); return t ? Math.round(doneOf(r) * 100 / t) : 0; }
 
@@ -765,18 +880,25 @@ function cellCard(r) {
     </div>` : '';
 
   let note = '';
-  if (c.qa) note = `<div class="note">Célula transversal: valida <b>todos</b> los módulos cuando las células de desarrollo entregan. Su carga es la suma de lo que las demás células ponen en <b>Listo para QA</b> / <b>En revisión</b>.</div>`;
+  if (c.qa) note = `<div class="note">Célula transversal: valida <b>todos</b> los módulos. Su carga son las tarjetas <b>asignadas a QA</b> en cualquier estado <b>menos Reabierta</b>: una vez reabierta, el bug pasa a los devs y queda asignado a ellos.</div>`;
   else if (!has) note = `<div class="note">Sin space en ClickUp todavía. Apenas se cree el space del módulo <b>${c.module}</b>, agregar su id en <code>CELLS</code> y el panel lo levanta solo.</div>`;
 
   let qaLoad = '';
   if (c.qa) {
-    const real = DATA.filter(x => x.cell.space && !x.cell.qa);
-    const enQA = real.reduce((a,x) => a + x.buckets.qa.p + x.buckets.qa.s + x.buckets.revision.p + x.buckets.revision.s, 0);
-    const cerr = real.reduce((a,x) => a + doneOf(x), 0);
+    const q = qaStats();
+    const pend = q.porLista.filter(x => x.cola > 0);
     qaLoad = `<div class="nums">
-      <div class="num-box"><div class="n">${fmt(enQA)}</div><div class="l">En cola de QA</div></div>
-      <div class="num-box"><div class="n">${fmt(cerr)}</div><div class="l">Ya validado</div></div>
-      <div class="num-box"><div class="n">${real.length}</div><div class="l">Módulos a cargo</div></div>
+      <div class="num-box"><div class="n">${fmt(q.cola)}</div><div class="l">Pendiente de QA</div></div>
+      <div class="num-box"><div class="n">${fmt(q.validado)}</div><div class="l">Ya validado</div></div>
+      <div class="num-box"><div class="n">${fmt(q.reabiertas)}</div><div class="l">Reabiertas → devs</div></div>
+    </div>
+    <div class="sprint-list">
+      ${pend.length
+        ? pend.map(x => `<div class="sprint-row">
+            <span class="sp-name">${x.module} · ${x.name}</span>
+            <span class="sp-n">por probar <b>${fmt(x.cola)}</b></span>
+          </div>`).join('')
+        : `<div class="sprint-row"><span class="sp-name">Sin pendientes de QA en este momento</span></div>`}
     </div>`;
   }
 
@@ -854,10 +976,10 @@ function renderComparativa() {
     const c = r.cell;
     const t = total(r);
     if (c.qa) {
-      const real = DATA.filter(x => x.cell.space && !x.cell.qa);
-      const enQA = real.reduce((a,x) => a + x.buckets.qa.p + x.buckets.qa.s + x.buckets.revision.p + x.buckets.revision.s, 0);
+      const q = qaStats();
+      const donde = q.porLista.filter(x => x.cola > 0).map(x => `${x.module} · ${x.name} (${fmt(x.cola)})`).join(' · ') || 'sin pendientes';
       return `<tr><td>QA</td><td>${c.module}</td><td>${c.members.map(i=>PEOPLE[i].name).join(', ')}</td>
-        <td class="num" colspan="8" style="color:var(--text-muted)">Transversal — ${fmt(enQA)} tarjetas hoy en cola de revisión/QA sobre ${real.length} módulos</td></tr>`;
+        <td class="num" colspan="8" style="color:var(--text-muted)">Transversal — ${fmt(q.cola)} por probar · ${fmt(q.validado)} validadas · ${fmt(q.reabiertas)} reabiertas en devs → ${donde}</td></tr>`;
     }
     if (!c.space) {
       return `<tr><td>${c.n}</td><td>${c.module}</td><td>${c.members.map(i=>PEOPLE[i].name).join(', ')}</td>
@@ -959,11 +1081,27 @@ document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () =>
   currentTab = t.dataset.tab;
   render();
 }));
-document.getElementById('refreshBtn').addEventListener('click', loadAll);
+document.getElementById('refreshBtn').addEventListener('click', () => loadAll());
 document.getElementById('exportCsvBtn').addEventListener('click', exportCsv);
 
-loadAll();
-setInterval(loadAll, 5 * 60 * 1000);
+const cached = readCache();
+if (cached) {
+  DATA = CELLS.map(c => {
+    const row = cached.cells.find(x => x.module === c.module);
+    if (!row) return emptyRow(c);
+    (row.lists || []).forEach(l => { l.buckets = normBuckets(l.buckets); l.qa = l.qa || emptyQa(); });
+    return { cell:c, lists:row.lists || [], parents:row.parents, subs:row.subs,
+             buckets:normBuckets(row.buckets), qa:row.qa || emptyQa(),
+             error:null, fromSnapshot:row.fromSnapshot };
+  });
+  document.getElementById('lastUpdated').textContent =
+    'Caché ' + new Date(cached.ts).toLocaleString('es-AR');
+  render();
+  loadAll({ background:true });
+} else {
+  loadAll();
+}
+setInterval(() => loadAll({ background:true }), 5 * 60 * 1000);
 </script>
 </body>
 </html>
