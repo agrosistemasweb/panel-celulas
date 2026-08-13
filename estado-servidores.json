@@ -1,9 +1,14 @@
 {
+<<<<<<< HEAD
   "actualizado": "2026-08-13T15:46:00.786Z",
+=======
+  "actualizado": "2026-08-13T15:59:19.133Z",
+>>>>>>> a61ebcd (Sonda: reintentos y doble confirmacion antes de declarar una caida)
   "ambientes": {
     "produccion": {
       "nombre": "Producción",
       "url": "https://app.agrosistemas.com.ar",
+<<<<<<< HEAD
       "estado": "caido",
       "detalle": "fetch failed",
       "httpStatus": 0,
@@ -12,6 +17,18 @@
       "desde": "2026-08-13T15:46:00.786Z",
       "ultimoChequeo": "2026-08-13T15:46:00.786Z",
       "ultimoDeploy": null
+=======
+      "estado": "ok",
+      "detalle": "responde en 1.1 s",
+      "httpStatus": 200,
+      "ms": 1105,
+      "huella": "730b9905c353",
+      "desde": "2026-08-13T15:59:19.133Z",
+      "ultimoChequeo": "2026-08-13T15:59:19.133Z",
+      "ultimoDeploy": null,
+      "fallosSeguidos": 0,
+      "intentos": 1
+>>>>>>> a61ebcd (Sonda: reintentos y doble confirmacion antes de declarar una caida)
     },
     "stage": {
       "nombre": "Stage",
@@ -19,11 +36,21 @@
       "estado": "ok",
       "detalle": "responde en 0.3 s",
       "httpStatus": 200,
+<<<<<<< HEAD
       "ms": 300,
       "huella": "5eb4cf951f44",
       "desde": "2026-08-13T15:29:45.647Z",
       "ultimoChequeo": "2026-08-13T15:46:00.786Z",
       "ultimoDeploy": null
+=======
+      "ms": 539,
+      "huella": "5eb4cf951f44",
+      "desde": "2026-08-13T15:59:19.133Z",
+      "ultimoChequeo": "2026-08-13T15:59:19.133Z",
+      "ultimoDeploy": null,
+      "fallosSeguidos": 0,
+      "intentos": 1
+>>>>>>> a61ebcd (Sonda: reintentos y doble confirmacion antes de declarar una caida)
     },
     "devapp": {
       "nombre": "Devapp",
@@ -31,15 +58,26 @@
       "estado": "ok",
       "detalle": "responde en 0.4 s",
       "httpStatus": 200,
+<<<<<<< HEAD
       "ms": 439,
       "huella": "f0282b9509a0",
       "desde": "2026-08-13T15:29:45.647Z",
       "ultimoChequeo": "2026-08-13T15:46:00.786Z",
       "ultimoDeploy": null
+=======
+      "ms": 507,
+      "huella": "f0282b9509a0",
+      "desde": "2026-08-13T15:59:19.133Z",
+      "ultimoChequeo": "2026-08-13T15:59:19.133Z",
+      "ultimoDeploy": null,
+      "fallosSeguidos": 0,
+      "intentos": 1
+>>>>>>> a61ebcd (Sonda: reintentos y doble confirmacion antes de declarar una caida)
     }
   },
   "historial": [
     {
+<<<<<<< HEAD
       "cuando": "2026-08-13T15:46:00.786Z",
       "ambiente": "produccion",
       "estado": "caido",
@@ -49,6 +87,9 @@
     },
     {
       "cuando": "2026-08-13T15:29:45.647Z",
+=======
+      "cuando": "2026-08-13T15:59:19.133Z",
+>>>>>>> a61ebcd (Sonda: reintentos y doble confirmacion antes de declarar una caida)
       "ambiente": "devapp",
       "estado": "ok",
       "detalle": "responde en 0.5 s",
@@ -56,7 +97,7 @@
       "texto": "🟢 **Devapp**: recuperado (venía de sin dato) — responde en 0.5 s"
     },
     {
-      "cuando": "2026-08-13T15:29:45.647Z",
+      "cuando": "2026-08-13T15:59:19.133Z",
       "ambiente": "stage",
       "estado": "ok",
       "detalle": "responde en 0.5 s",
@@ -64,7 +105,7 @@
       "texto": "🟢 **Stage**: recuperado (venía de sin dato) — responde en 0.5 s"
     },
     {
-      "cuando": "2026-08-13T15:29:45.647Z",
+      "cuando": "2026-08-13T15:59:19.133Z",
       "ambiente": "produccion",
       "estado": "ok",
       "detalle": "responde en 1.1 s",

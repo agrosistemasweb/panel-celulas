@@ -47,7 +47,7 @@ function huellaDeBuild(html) {
   return createHash('sha1').update(unicos.join('|')).digest('hex').slice(0, 12);
 }
 
-async function sondear(amb) {
+async function unIntento(amb) {
   const t0 = Date.now();
   const ctrl = new AbortController();
   const reloj = setTimeout(() => ctrl.abort(), TIMEOUT);
@@ -74,6 +74,21 @@ async function sondear(amb) {
   } finally {
     clearTimeout(reloj);
   }
+}
+
+/**
+ * Sondea con reintentos. La red del runner falla de a ratos, y un solo timeout
+ * no alcanza para decir que un ambiente se cayo: se reintenta 3 veces con
+ * espera creciente y se toma el mejor resultado.
+ */
+async function sondear(amb) {
+  let ultimo = null;
+  for (let i = 0; i < 3; i++) {
+    if (i) await new Promise((r) => setTimeout(r, i * 2500));
+    ultimo = await unIntento(amb);
+    if (ultimo.httpStatus >= 200 && ultimo.httpStatus < 400) return { ...ultimo, intentos: i + 1 };
+  }
+  return { ...ultimo, intentos: 3 };
 }
 
 /** Clasifica el estado a partir de la respuesta y de lo que sabíamos antes. */
@@ -130,7 +145,18 @@ const alertas = [];
 for (const amb of AMBIENTES) {
   const previo = anterior.ambientes?.[amb.id];
   const r = await sondear(amb);
-  const { estado, detalle, deployTermino } = clasificar(r, previo);
+  let { estado, detalle, deployTermino } = clasificar(r, previo);
+
+  // Doble confirmacion antes de declarar una caida: un unico fallo puede ser la
+  // red del runner, no el servidor. Recien con dos chequeos seguidos fallidos se
+  // marca caido y se avisa; el primero queda como "verificando".
+  const fallo = estado === 'caido';
+  const fallosSeguidos = fallo ? (previo?.fallosSeguidos || 0) + 1 : 0;
+  if (fallo && fallosSeguidos < 2) {
+    estado = previo?.estado && previo.estado !== 'caido' ? previo.estado : 'degradado';
+    detalle = `no respondió en este chequeo (${r.error || 'sin respuesta'}) — se confirma en el próximo`;
+    deployTermino = false;
+  }
 
   const cambio = !previo || previo.estado !== estado || deployTermino;
   salida.ambientes[amb.id] = {
@@ -144,6 +170,8 @@ for (const amb of AMBIENTES) {
     desde: cambio ? ahoraISO : previo?.desde || ahoraISO,
     ultimoChequeo: ahoraISO,
     ultimoDeploy: deployTermino ? ahoraISO : previo?.ultimoDeploy || null,
+    fallosSeguidos,
+    intentos: r.intentos || 1,
   };
 
   if (cambio) {
@@ -158,7 +186,8 @@ for (const amb of AMBIENTES) {
     });
     if (previo) alertas.push(texto);   // en la primera corrida no alerta: no hay con qué comparar
   }
-  console.log(`${ETIQUETA[estado]}  ${amb.nombre.padEnd(11)} http=${r.httpStatus} ${String(r.ms).padStart(5)}ms build=${r.huella || '-'} ${cambio ? '(cambio)' : ''}`);
+  const marca = fallo && fallosSeguidos === 1 ? '⏳ Verificando' : ETIQUETA[estado];
+  console.log(`${marca}  ${amb.nombre.padEnd(11)} http=${r.httpStatus} ${String(r.ms).padStart(5)}ms intentos=${r.intentos || 1} build=${r.huella || '-'} ${cambio ? '(cambio)' : ''}`);
 }
 
 salida.historial = salida.historial.slice(0, MAX_HISTORIAL);
