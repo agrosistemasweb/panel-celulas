@@ -1,0 +1,75 @@
+name: Estado de servidores
+
+# Sondea produccion, stage y devapp; publica estado-servidores.json para el panel
+# y avisa por Discord cuando un ambiente empieza un deploy, lo termina, se cae o se recupera.
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'   # cada 5 minutos (minimo que permite GitHub Actions)
+  workflow_dispatch:         # y a mano desde la pestaña Actions
+
+permissions:
+  contents: write            # para commitear el JSON de estado
+
+concurrency:
+  group: estado-servidores
+  cancel-in-progress: false
+
+jobs:
+  sondear:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Sondear los 3 ambientes
+        id: sonda
+        run: |
+          node scripts/sonda-servidores.mjs | tee /tmp/salida.txt
+          # las transiciones vienen como lineas ALERTA|texto
+          grep '^ALERTA|' /tmp/salida.txt | sed 's/^ALERTA|//' > /tmp/alertas.txt || true
+          echo "cantidad=$(wc -l < /tmp/alertas.txt)" >> "$GITHUB_OUTPUT"
+
+      - name: Publicar el estado para el panel
+        run: |
+          if [ -n "$(git status --porcelain estado-servidores.json)" ]; then
+            git config user.name  "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add estado-servidores.json
+            git commit -m "estado de servidores: $(date -u '+%Y-%m-%d %H:%M UTC')"
+            git push
+          else
+            echo "sin cambios en el estado"
+          fi
+
+      - name: Avisar por Discord
+        if: steps.sonda.outputs.cantidad != '0'
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_SERVIDORES }}
+        run: |
+          if [ -z "$WEBHOOK" ]; then
+            echo "No hay secret DISCORD_WEBHOOK_SERVIDORES configurado: no se envia aviso."
+            echo "Transiciones detectadas:"; cat /tmp/alertas.txt
+            exit 0
+          fi
+          # un solo mensaje con todas las transiciones de esta corrida
+          CUERPO=$(cat /tmp/alertas.txt | sed 's/"/\\"/g' | awk '{printf "%s\\n", $0}')
+          curl -sS -X POST "$WEBHOOK" \
+            -H 'Content-Type: application/json' \
+            -d "{\"username\":\"Estado de servidores\",\"content\":\"$CUERPO\"}" \
+            && echo "aviso enviado"
+
+      - name: Resumen en el log
+        if: always()
+        run: |
+          echo "### Estado de servidores" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          grep -v '^ALERTA|' /tmp/salida.txt >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          if [ -s /tmp/alertas.txt ]; then
+            echo "**Transiciones avisadas:**" >> "$GITHUB_STEP_SUMMARY"
+            sed 's/^/- /' /tmp/alertas.txt >> "$GITHUB_STEP_SUMMARY"
+          fi

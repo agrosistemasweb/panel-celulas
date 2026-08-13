@@ -127,6 +127,35 @@ td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
 .err { background:rgba(239,68,68,.1); border:1px solid var(--danger); color:#fca5a5; padding:10px 14px; border-radius:9px; font-size:12.5px; margin-bottom:14px; }
 a.link { color:var(--accent); text-decoration:none; }
 a.link:hover { text-decoration:underline; }
+
+/* ---- Estado de servidores ---- */
+.srv-dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-left:6px; vertical-align:middle; background:#64748b; }
+.srv-dot.ok { background:#22c55e; }
+.srv-dot.deployando { background:#3b82f6; animation:srvPulse 1.2s ease-in-out infinite; }
+.srv-dot.degradado { background:#eab308; }
+.srv-dot.caido { background:#ef4444; animation:srvPulse .8s ease-in-out infinite; }
+@keyframes srvPulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+.srv-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:14px; margin-bottom:18px; }
+.srv-card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:16px 18px; border-left:4px solid #64748b; }
+.srv-card.ok { border-left-color:#22c55e; }
+.srv-card.deployando { border-left-color:#3b82f6; }
+.srv-card.degradado { border-left-color:#eab308; }
+.srv-card.caido { border-left-color:#ef4444; }
+.srv-card h3 { margin:0 0 4px; font-size:15px; display:flex; align-items:center; gap:8px; }
+.srv-estado { font-size:13px; font-weight:600; margin-bottom:8px; }
+.srv-card.ok .srv-estado { color:#4ade80; }
+.srv-card.deployando .srv-estado { color:#60a5fa; }
+.srv-card.degradado .srv-estado { color:#facc15; }
+.srv-card.caido .srv-estado { color:#f87171; }
+.srv-meta { font-size:11.5px; color:var(--muted); line-height:1.7; }
+.srv-meta b { color:var(--text); font-weight:600; }
+.srv-hist { background:var(--card); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+.srv-hist table { width:100%; border-collapse:collapse; font-size:12.5px; }
+.srv-hist th { text-align:left; padding:9px 14px; background:rgba(255,255,255,.03); color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.06em; }
+.srv-hist td { padding:9px 14px; border-top:1px solid var(--border); }
+.srv-hist td.cuando { color:var(--muted); white-space:nowrap; font-variant-numeric:tabular-nums; }
+.srv-alert-btn { background:transparent; border:1px solid var(--accent); color:var(--accent); padding:7px 13px; border-radius:8px; font-size:12px; cursor:pointer; }
+.srv-alert-btn.on { background:var(--accent); color:#0b1220; }
 </style>
 </head>
 <body>
@@ -146,6 +175,7 @@ a.link:hover { text-decoration:underline; }
   <button class="tab active" data-tab="celulas">Células</button>
   <button class="tab" data-tab="comparativa">Comparativa vs Contable</button>
   <button class="tab" data-tab="detalle">Detalle por sprint</button>
+  <button class="tab" data-tab="servidores">Estado de servidores <span class="srv-dot" id="srvDot"></span></button>
 </div>
 
 <div class="content" id="content">
@@ -1074,6 +1104,150 @@ function renderDetalle() {
 // ============================================================
 // RENDER dispatcher
 // ============================================================
+// ============================================================
+// ESTADO DE SERVIDORES
+// Lee estado-servidores.json, que publica el workflow "Estado de
+// servidores" cada 5 minutos sondeando produccion, stage y devapp.
+// ============================================================
+let SRV = null;              // ultimo JSON leido
+let SRV_TIMER = null;        // polling mientras el tab esta abierto
+let SRV_AVISOS = localStorage.getItem('srvAvisos') === '1';
+
+const SRV_ETIQUETA = {
+  ok:         'En servicio',
+  deployando: 'Deployando…',
+  degradado:  'Degradado',
+  caido:      'Caído'
+};
+
+function srvHace(iso) {
+  if (!iso) return '—';
+  const seg = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+  if (seg < 90)   return `hace ${Math.round(seg)} s`;
+  if (seg < 5400) return `hace ${Math.round(seg / 60)} min`;
+  if (seg < 172800) return `hace ${Math.round(seg / 3600)} h`;
+  return `hace ${Math.round(seg / 86400)} días`;
+}
+
+function srvHora(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+async function srvCargar() {
+  try {
+    const res = await fetch(`estado-servidores.json?v=${Date.now()}`, { cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const nuevo = await res.json();
+    // avisar en el navegador si algun ambiente cambio de estado desde la ultima lectura
+    if (SRV && SRV_AVISOS) {
+      for (const [id, a] of Object.entries(nuevo.ambientes || {})) {
+        const antes = SRV.ambientes?.[id];
+        if (antes && antes.estado !== a.estado) {
+          srvNotificar(`${a.nombre}: ${SRV_ETIQUETA[a.estado] || a.estado}`, a.detalle || '');
+        } else if (antes && a.ultimoDeploy && a.ultimoDeploy !== antes.ultimoDeploy) {
+          srvNotificar(`${a.nombre}: deploy terminado`, a.detalle || '');
+        }
+      }
+    }
+    SRV = nuevo;
+    srvPintarDot();
+    return true;
+  } catch (e) {
+    SRV = SRV || { error: String(e.message || e) };
+    return false;
+  }
+}
+
+function srvPeor() {
+  if (!SRV || !SRV.ambientes) return null;
+  const orden = ['caido', 'deployando', 'degradado', 'ok'];
+  return Object.values(SRV.ambientes).map(a => a.estado)
+    .sort((x, y) => orden.indexOf(x) - orden.indexOf(y))[0] || null;
+}
+
+function srvPintarDot() {
+  const dot = document.getElementById('srvDot');
+  if (!dot) return;
+  dot.className = 'srv-dot' + (srvPeor() ? ' ' + srvPeor() : '');
+}
+
+function srvNotificar(titulo, cuerpo) {
+  try {
+    if (window.Notification && Notification.permission === 'granted') {
+      new Notification(titulo, { body: cuerpo });
+    }
+  } catch (_) { /* el navegador puede bloquearlo: el aviso de Discord sigue funcionando */ }
+}
+
+async function srvToggleAvisos() {
+  if (!SRV_AVISOS && window.Notification && Notification.permission !== 'granted') {
+    const p = await Notification.requestPermission();
+    if (p !== 'granted') { alert('El navegador no dio permiso para notificar. Los avisos por Discord siguen funcionando igual.'); return; }
+  }
+  SRV_AVISOS = !SRV_AVISOS;
+  localStorage.setItem('srvAvisos', SRV_AVISOS ? '1' : '0');
+  render();
+}
+
+function renderServidores() {
+  if (!SRV) return `<div class="loading"><div class="spinner"></div>Leyendo el estado de los servidores…</div>`;
+  if (SRV.error) {
+    return `<div class="err">No se pudo leer <code>estado-servidores.json</code> (${SRV.error}).
+      Si es la primera vez, el archivo aparece después de la primera corrida del workflow
+      <b>Estado de servidores</b> (pestaña Actions del repo, o esperando el cron de 5 minutos).</div>`;
+  }
+  const ambs = Object.entries(SRV.ambientes || {});
+  const tarjetas = ambs.map(([id, a]) => `
+    <div class="srv-card ${a.estado}">
+      <h3><span class="srv-dot ${a.estado}"></span> ${a.nombre}</h3>
+      <div class="srv-estado">${SRV_ETIQUETA[a.estado] || a.estado}</div>
+      <div class="srv-meta">
+        ${a.detalle ? `${a.detalle}<br>` : ''}
+        En este estado desde <b>${srvHora(a.desde)}</b> (${srvHace(a.desde)})<br>
+        Último chequeo: <b>${srvHace(a.ultimoChequeo)}</b> · HTTP ${a.httpStatus || '—'} · ${a.ms ? (a.ms / 1000).toFixed(1) + ' s' : '—'}<br>
+        Build publicado: <b>${a.huella || '—'}</b>${a.ultimoDeploy ? ` · último deploy detectado ${srvHace(a.ultimoDeploy)}` : ''}<br>
+        <a class="link" href="${a.url}" target="_blank" rel="noopener">${a.url.replace('https://', '')}</a>
+      </div>
+    </div>`).join('');
+
+  const hist = (SRV.historial || []).slice(0, 30);
+  const filas = hist.length
+    ? hist.map(h => `<tr>
+        <td class="cuando">${srvHora(h.cuando)}</td>
+        <td><span class="srv-dot ${h.estado}"></span> ${SRV.ambientes?.[h.ambiente]?.nombre || h.ambiente}</td>
+        <td>${h.deployTermino ? '<b>Deploy terminado</b> · ' : ''}${h.detalle || SRV_ETIQUETA[h.estado] || h.estado}</td>
+      </tr>`).join('')
+    : `<tr><td colspan="3" style="color:var(--muted)">Todavía no hubo cambios de estado registrados.</td></tr>`;
+
+  return `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+      <h2 class="section-title" style="margin:0">Estado de los ambientes</h2>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span class="last-updated">Sondeo automático cada 5 min · última lectura ${srvHace(SRV.actualizado)}</span>
+        <button class="srv-alert-btn ${SRV_AVISOS ? 'on' : ''}" onclick="srvToggleAvisos()">
+          ${SRV_AVISOS ? '🔔 Avisos activados' : '🔕 Avisarme en este navegador'}
+        </button>
+      </div>
+    </div>
+    <div class="srv-grid">${tarjetas}</div>
+    <h2 class="section-title">Últimos movimientos</h2>
+    <div class="srv-hist">
+      <table>
+        <thead><tr><th>Cuándo</th><th>Ambiente</th><th>Qué pasó</th></tr></thead>
+        <tbody>${filas}</tbody>
+      </table>
+    </div>
+    <div class="note" style="margin-top:14px">
+      <b>Cómo se detecta.</b> Un sondeo automático consulta los tres ambientes cada 5 minutos:
+      si el servidor devuelve 502/503/504 es que el contenedor está reiniciando (<b>deployando</b>);
+      si no responde, está <b>caído</b>; y cuando vuelve a responder con una versión distinta
+      (cambia la huella del build), se registra que el <b>deploy terminó</b>.
+      Los avisos llegan al canal de Discord aunque el panel esté cerrado; el botón de arriba
+      agrega además una notificación del navegador mientras esta página esté abierta.
+    </div>`;
+}
+
 function render() {
   renderTotalizers();
   const el = document.getElementById('content');
@@ -1082,6 +1256,7 @@ function render() {
     : '';
   if (currentTab === 'celulas')     el.innerHTML = banner + renderCelulas();
   else if (currentTab === 'comparativa') el.innerHTML = banner + renderComparativa();
+  else if (currentTab === 'servidores')  el.innerHTML = renderServidores();
   else                              el.innerHTML = banner + renderDetalle();
 }
 
@@ -1111,12 +1286,24 @@ function exportCsv() {
 // ============================================================
 // EVENTS
 // ============================================================
-document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
+document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', async () => {
   document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
   t.classList.add('active');
   currentTab = t.dataset.tab;
   render();
+  // el tab de servidores se refresca solo cada 60 s mientras esta abierto
+  clearInterval(SRV_TIMER); SRV_TIMER = null;
+  if (currentTab === 'servidores') {
+    await srvCargar(); render();
+    SRV_TIMER = setInterval(async () => {
+      if (await srvCargar() && currentTab === 'servidores') render();
+    }, 60000);
+  }
 }));
+
+// lectura inicial en segundo plano: pinta el semaforo del tab y habilita los avisos
+srvCargar().then(() => { srvPintarDot(); if (currentTab === 'servidores') render(); });
+setInterval(() => { if (currentTab !== 'servidores') srvCargar(); }, 300000);
 document.getElementById('refreshBtn').addEventListener('click', () => loadAll());
 document.getElementById('exportCsvBtn').addEventListener('click', exportCsv);
 

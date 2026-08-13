@@ -1,0 +1,67 @@
+{
+  "actualizado": "2026-08-13T15:29:45.647Z",
+  "ambientes": {
+    "produccion": {
+      "nombre": "Producción",
+      "url": "https://app.agrosistemas.com.ar",
+      "estado": "ok",
+      "detalle": "responde en 1.1 s",
+      "httpStatus": 200,
+      "ms": 1085,
+      "huella": "730b9905c353",
+      "desde": "2026-08-13T15:29:45.647Z",
+      "ultimoChequeo": "2026-08-13T15:29:45.647Z",
+      "ultimoDeploy": null
+    },
+    "stage": {
+      "nombre": "Stage",
+      "url": "https://stage.agrosistemas.com.ar",
+      "estado": "ok",
+      "detalle": "responde en 0.5 s",
+      "httpStatus": 200,
+      "ms": 516,
+      "huella": "5eb4cf951f44",
+      "desde": "2026-08-13T15:29:45.647Z",
+      "ultimoChequeo": "2026-08-13T15:29:45.647Z",
+      "ultimoDeploy": null
+    },
+    "devapp": {
+      "nombre": "Devapp",
+      "url": "https://devapp.agrosistemas.com.ar",
+      "estado": "ok",
+      "detalle": "responde en 0.5 s",
+      "httpStatus": 200,
+      "ms": 509,
+      "huella": "f0282b9509a0",
+      "desde": "2026-08-13T15:29:45.647Z",
+      "ultimoChequeo": "2026-08-13T15:29:45.647Z",
+      "ultimoDeploy": null
+    }
+  },
+  "historial": [
+    {
+      "cuando": "2026-08-13T15:29:45.647Z",
+      "ambiente": "devapp",
+      "estado": "ok",
+      "detalle": "responde en 0.5 s",
+      "deployTermino": false,
+      "texto": "🟢 **Devapp**: recuperado (venía de sin dato) — responde en 0.5 s"
+    },
+    {
+      "cuando": "2026-08-13T15:29:45.647Z",
+      "ambiente": "stage",
+      "estado": "ok",
+      "detalle": "responde en 0.5 s",
+      "deployTermino": false,
+      "texto": "🟢 **Stage**: recuperado (venía de sin dato) — responde en 0.5 s"
+    },
+    {
+      "cuando": "2026-08-13T15:29:45.647Z",
+      "ambiente": "produccion",
+      "estado": "ok",
+      "detalle": "responde en 1.1 s",
+      "deployTermino": false,
+      "texto": "🟢 **Producción**: recuperado (venía de sin dato) — responde en 1.1 s"
+    }
+  ]
+}
