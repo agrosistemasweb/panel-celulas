@@ -582,7 +582,7 @@ const SNAPSHOT = {
 // Buckets de estado (normalizados a minúsculas y espacios colapsados)
 const BUCKETS = [
   { key:'pendiente', label:'Pendiente / Bloqueada', color:'#94a3b8',
-    statuses:['to do','a revisar','pendiente','blockeado','bloqueado','bloqueado - rev-fun','bloqueado - rev -fun','bloqueado - rev. fun','blocked'] },
+    statuses:['to do','a revisar','pendiente','blockeado','blockeada','bloqueado','bloqueada','bloqueado - rev-fun','bloqueado - rev -fun','bloqueado - rev. fun','blocked'] },
   // "Reabierta" NO es trabajo de QA: el bug ya se pasó a los devs y queda asignado a ellos.
   { key:'reabierta', label:'Reabierta (en devs)', color:'#f97316',
     statuses:['reabiertas','reabierta','reopened'] },
@@ -631,6 +631,9 @@ function release() {
   const next = waiting.shift();
   if (next) next(); else inflight--;
 }
+
+// Sólo estos fallos justifican mostrar el snapshot embebido en lugar de los datos reales.
+function accesoRoto() { return LAST_ERR === 401 || LAST_ERR === 403 || LAST_ERR === 'red'; }
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -777,10 +780,11 @@ async function loadCell(cell) {
     for (const uid in row.byUser) res.byUser[uid] = (res.byUser[uid] || 0) + row.byUser[uid];
   }
 
-  // Respaldo: sólo si el proxy FALLÓ (token vencido, caída, CORS).
-  // Un módulo que legítimamente devuelve 0 tarjetas no debe disparar el snapshot:
-  // eso hacía aparecer el cartel de "token vencido" con el proxy funcionando.
-  if (res.parents + res.subs === 0 && (failed > 0 || lists.length === 0)) {
+  // Respaldo: sólo si el acceso al proxy está REALMENTE roto (token vencido, caída, CORS).
+  // No se activa por 429 (ya se reintenta con backoff) ni por un módulo que
+  // legítimamente devuelve 0 tarjetas: eso mostraba el cartel de "token vencido"
+  // y los números del snapshot con el worker respondiendo 200.
+  if (res.parents + res.subs === 0 && accesoRoto() && (failed > 0 || lists.length === 0)) {
     const rows = cell.folders.flatMap(f => SNAPSHOT.folders[f] || []);
     if (rows.length) {
       USED_SNAPSHOT = true;
