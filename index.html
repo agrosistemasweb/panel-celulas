@@ -613,10 +613,46 @@ let USED_SNAPSHOT = false;   // true si el proxy no respondió y se usó el snap
 // ============================================================
 // FETCH
 // ============================================================
-async function jget(path) {
-  const r = await fetch(PROXY + path);
-  if (!r.ok) throw new Error('HTTP ' + r.status);
-  return r.json();
+// Último código de error visto, para que el cartel diga la causa real
+// (401 = token del worker vencido, 429 = rate limit de ClickUp, otro = proxy caído).
+let LAST_ERR = null;
+
+// Semáforo global de requests: las células, sus listas y las páginas se piden en
+// paralelo, y sin tope se llegaba a 50+ requests simultáneos → ClickUp devolvía 429
+// (100 req/min) y el panel lo interpretaba como "token vencido".
+const MAX_INFLIGHT = 6;
+let inflight = 0;
+const waiting = [];
+function acquire() {
+  if (inflight < MAX_INFLIGHT) { inflight++; return Promise.resolve(); }
+  return new Promise(res => waiting.push(res));
+}
+function release() {
+  const next = waiting.shift();
+  if (next) next(); else inflight--;
+}
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// Reintenta 429 y 5xx con backoff: el 429 es transitorio, no un fallo de datos.
+async function jget(path, tries = 4) {
+  for (let i = 1; ; i++) {
+    await acquire();
+    let r;
+    try { r = await fetch(PROXY + path); }
+    catch (e) { release(); if (i >= tries) { LAST_ERR = 'red'; throw e; } await sleep(600 * i); continue; }
+    finally { if (r) release(); }
+
+    if (r.ok) return r.json();
+
+    if ((r.status === 429 || r.status >= 500) && i < tries) {
+      const ra = parseFloat(r.headers.get('retry-after') || '0');
+      await sleep(ra > 0 ? ra * 1000 : 1200 * i);
+      continue;
+    }
+    LAST_ERR = r.status;
+    throw new Error('HTTP ' + r.status);
+  }
 }
 
 async function listsOfFolder(folderId) {
@@ -794,6 +830,7 @@ function readCache() {
 async function loadAll(opts) {
   const background = !!(opts && opts.background);
   USED_SNAPSHOT = false;
+  LAST_ERR = null;
   if (!background) {
     // placeholders + render incremental: cada célula aparece en cuanto termina,
     // en lugar de esperar a la más lenta (Contable Sprint 8).
@@ -813,7 +850,7 @@ async function loadAll(opts) {
 
   DATA = results;
   document.getElementById('lastUpdated').textContent = USED_SNAPSHOT
-    ? `⚠ Snapshot del ${SNAPSHOT.date} (proxy sin responder)`
+    ? `⚠ Snapshot del ${SNAPSHOT.date} (${motivoCorto()})`
     : 'Actualizado ' + new Date().toLocaleString('es-AR');
   render();
   if (!USED_SNAPSHOT) saveCache();
@@ -1248,11 +1285,32 @@ function renderServidores() {
     </div>`;
 }
 
+// El cartel debe decir la causa real: antes atribuía cualquier fallo a
+// "token del worker vencido" y aparecía con el worker respondiendo 200.
+function causaFallo() {
+  if (LAST_ERR === 401 || LAST_ERR === 403)
+    return 'El worker de ClickUp devolvió <b>HTTP ' + LAST_ERR + '</b>: el token está vencido. Renovar el secret <code>CLICKUP_API_TOKEN</code> del worker (<code>wrangler secret put</code> en <code>panel-bugs/</code>) y el panel vuelve a actualizarse solo.';
+  if (LAST_ERR === 429)
+    return 'ClickUp está limitando por volumen de pedidos (<b>HTTP 429</b>). El token está bien: reintentar con <b>Actualizar</b> en un minuto.';
+  if (LAST_ERR === 'red')
+    return 'No se pudo llegar al worker de ClickUp (red o CORS).';
+  if (typeof LAST_ERR === 'number')
+    return 'El worker de ClickUp devolvió <b>HTTP ' + LAST_ERR + '</b>.';
+  return 'El proxy de ClickUp no devolvió datos para algún módulo.';
+}
+function motivoCorto() {
+  if (LAST_ERR === 401 || LAST_ERR === 403) return 'token del worker vencido';
+  if (LAST_ERR === 429) return 'rate limit de ClickUp';
+  if (LAST_ERR === 'red') return 'worker inalcanzable';
+  if (typeof LAST_ERR === 'number') return 'HTTP ' + LAST_ERR;
+  return 'proxy sin responder';
+}
+
 function render() {
   renderTotalizers();
   const el = document.getElementById('content');
   const banner = USED_SNAPSHOT
-    ? `<div class="err">El proxy de ClickUp no está devolviendo datos (token del worker vencido). Se muestran los números del <b>snapshot del ${SNAPSHOT.date}</b>. Al renovar el secret <code>CLICKUP_API_TOKEN</code> del worker, el panel vuelve a actualizarse solo.</div>`
+    ? `<div class="err">${causaFallo()} Se muestran los números del <b>snapshot del ${SNAPSHOT.date}</b>.</div>`
     : '';
   if (currentTab === 'celulas')     el.innerHTML = banner + renderCelulas();
   else if (currentTab === 'comparativa') el.innerHTML = banner + renderComparativa();
