@@ -1,50 +1,66 @@
 {
-  "actualizado": "2026-08-25T18:50:46.912Z",
+  "actualizado": "2026-08-25T19:08:39.339Z",
   "ambientes": {
     "produccion": {
       "nombre": "Producción",
       "url": "https://app.agrosistemas.com.ar",
       "estado": "ok",
-      "detalle": "responde en 1.4 s",
-      "httpStatus": 200,
-      "ms": 1351,
+      "detalle": "no respondió en este chequeo (sin respuesta en 20000 ms) — se confirma en el próximo",
+      "httpStatus": 0,
+      "ms": 20001,
       "huella": "730b9905c353",
       "desde": "2026-08-24T17:16:32.789Z",
-      "ultimoChequeo": "2026-08-25T18:50:46.912Z",
+      "ultimoChequeo": "2026-08-25T19:08:39.339Z",
       "ultimoDeploy": null,
-      "fallosSeguidos": 0,
-      "intentos": 1
+      "fallosSeguidos": 1,
+      "intentos": 3
     },
     "stage": {
       "nombre": "Stage",
       "url": "https://stage.agrosistemas.com.ar",
-      "estado": "ok",
-      "detalle": "responde en 0.7 s",
+      "estado": "degradado",
+      "detalle": "responde lento (19.5 s)",
       "httpStatus": 200,
-      "ms": 747,
+      "ms": 19495,
       "huella": "94cbd5058925",
-      "desde": "2026-08-25T13:53:48.843Z",
-      "ultimoChequeo": "2026-08-25T18:50:46.912Z",
+      "desde": "2026-08-25T19:08:39.339Z",
+      "ultimoChequeo": "2026-08-25T19:08:39.339Z",
       "ultimoDeploy": "2026-08-25T13:53:48.843Z",
       "fallosSeguidos": 0,
-      "intentos": 1
+      "intentos": 2
     },
     "devapp": {
       "nombre": "Devapp",
       "url": "https://devapp.agrosistemas.com.ar",
-      "estado": "ok",
-      "detalle": "responde en 0.8 s",
+      "estado": "degradado",
+      "detalle": "responde lento (17.5 s)",
       "httpStatus": 200,
-      "ms": 761,
+      "ms": 17515,
       "huella": "f17a216b6460",
-      "desde": "2026-08-25T13:53:48.843Z",
-      "ultimoChequeo": "2026-08-25T18:50:46.912Z",
+      "desde": "2026-08-25T19:08:39.339Z",
+      "ultimoChequeo": "2026-08-25T19:08:39.339Z",
       "ultimoDeploy": "2026-08-24T17:16:32.789Z",
       "fallosSeguidos": 0,
       "intentos": 1
     }
   },
   "historial": [
+    {
+      "cuando": "2026-08-25T19:08:39.339Z",
+      "ambiente": "devapp",
+      "estado": "degradado",
+      "detalle": "responde lento (17.5 s)",
+      "deployTermino": false,
+      "texto": "🟡 **Devapp**: degradado — responde lento (17.5 s)"
+    },
+    {
+      "cuando": "2026-08-25T19:08:39.339Z",
+      "ambiente": "stage",
+      "estado": "degradado",
+      "detalle": "responde lento (19.5 s)",
+      "deployTermino": false,
+      "texto": "🟡 **Stage**: degradado — responde lento (19.5 s)"
+    },
     {
       "cuando": "2026-08-25T13:53:48.843Z",
       "ambiente": "devapp",
