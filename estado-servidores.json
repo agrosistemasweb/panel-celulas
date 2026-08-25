@@ -1,5 +1,5 @@
 {
-  "actualizado": "2026-08-25T19:22:30.736Z",
+  "actualizado": "2026-08-25T19:39:11.731Z",
   "ambientes": {
     "produccion": {
       "nombre": "Producción",
@@ -7,10 +7,10 @@
       "estado": "ok",
       "detalle": "responde en 1.0 s",
       "httpStatus": 200,
-      "ms": 982,
+      "ms": 971,
       "huella": "730b9905c353",
       "desde": "2026-08-24T17:16:32.789Z",
-      "ultimoChequeo": "2026-08-25T19:22:30.736Z",
+      "ultimoChequeo": "2026-08-25T19:39:11.731Z",
       "ultimoDeploy": null,
       "fallosSeguidos": 0,
       "intentos": 1
@@ -21,10 +21,10 @@
       "estado": "ok",
       "detalle": "responde en 0.7 s",
       "httpStatus": 200,
-      "ms": 721,
+      "ms": 727,
       "huella": "94cbd5058925",
       "desde": "2026-08-25T19:22:30.736Z",
-      "ultimoChequeo": "2026-08-25T19:22:30.736Z",
+      "ultimoChequeo": "2026-08-25T19:39:11.731Z",
       "ultimoDeploy": "2026-08-25T13:53:48.843Z",
       "fallosSeguidos": 0,
       "intentos": 1
@@ -33,18 +33,26 @@
       "nombre": "Devapp",
       "url": "https://devapp.agrosistemas.com.ar",
       "estado": "ok",
-      "detalle": "responde en 0.8 s",
+      "detalle": "versión nueva publicada (build a367f2e667f9)",
       "httpStatus": 200,
-      "ms": 837,
-      "huella": "f17a216b6460",
-      "desde": "2026-08-25T19:22:30.736Z",
-      "ultimoChequeo": "2026-08-25T19:22:30.736Z",
-      "ultimoDeploy": "2026-08-24T17:16:32.789Z",
+      "ms": 457,
+      "huella": "a367f2e667f9",
+      "desde": "2026-08-25T19:39:11.731Z",
+      "ultimoChequeo": "2026-08-25T19:39:11.731Z",
+      "ultimoDeploy": "2026-08-25T19:39:11.731Z",
       "fallosSeguidos": 0,
       "intentos": 1
     }
   },
   "historial": [
+    {
+      "cuando": "2026-08-25T19:39:11.731Z",
+      "ambiente": "devapp",
+      "estado": "ok",
+      "detalle": "versión nueva publicada (build a367f2e667f9)",
+      "deployTermino": true,
+      "texto": "✅ **Devapp**: deploy terminado — versión nueva publicada (build a367f2e667f9)"
+    },
     {
       "cuando": "2026-08-25T19:22:30.736Z",
       "ambiente": "devapp",
