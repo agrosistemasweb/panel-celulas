@@ -1,16 +1,16 @@
 {
-  "actualizado": "2026-08-31T08:46:26.800Z",
+  "actualizado": "2026-08-31T08:54:42.554Z",
   "ambientes": {
     "produccion": {
       "nombre": "Producción",
       "url": "https://app.agrosistemas.com.ar",
-      "estado": "ok",
-      "detalle": "responde en 0.9 s",
+      "estado": "degradado",
+      "detalle": "responde lento (7.4 s)",
       "httpStatus": 200,
-      "ms": 913,
+      "ms": 7396,
       "huella": "730b9905c353",
-      "desde": "2026-08-26T12:32:15.668Z",
-      "ultimoChequeo": "2026-08-31T08:46:26.800Z",
+      "desde": "2026-08-31T08:54:42.554Z",
+      "ultimoChequeo": "2026-08-31T08:54:42.554Z",
       "ultimoDeploy": null,
       "fallosSeguidos": 0,
       "intentos": 1
@@ -19,12 +19,12 @@
       "nombre": "Stage",
       "url": "https://stage.agrosistemas.com.ar",
       "estado": "ok",
-      "detalle": "responde en 0.4 s",
+      "detalle": "responde en 0.6 s",
       "httpStatus": 200,
-      "ms": 365,
+      "ms": 638,
       "huella": "396dadf5c0b9",
       "desde": "2026-08-27T16:47:15.402Z",
-      "ultimoChequeo": "2026-08-31T08:46:26.800Z",
+      "ultimoChequeo": "2026-08-31T08:54:42.554Z",
       "ultimoDeploy": "2026-08-27T16:47:15.402Z",
       "fallosSeguidos": 0,
       "intentos": 1
@@ -33,18 +33,26 @@
       "nombre": "Devapp",
       "url": "https://devapp.agrosistemas.com.ar",
       "estado": "ok",
-      "detalle": "responde en 0.5 s",
+      "detalle": "responde en 4.3 s",
       "httpStatus": 200,
-      "ms": 463,
+      "ms": 4297,
       "huella": "0f0e03431286",
       "desde": "2026-08-27T16:47:15.402Z",
-      "ultimoChequeo": "2026-08-31T08:46:26.800Z",
+      "ultimoChequeo": "2026-08-31T08:54:42.554Z",
       "ultimoDeploy": "2026-08-27T16:47:15.402Z",
       "fallosSeguidos": 0,
       "intentos": 1
     }
   },
   "historial": [
+    {
+      "cuando": "2026-08-31T08:54:42.554Z",
+      "ambiente": "produccion",
+      "estado": "degradado",
+      "detalle": "responde lento (7.4 s)",
+      "deployTermino": false,
+      "texto": "🟡 **Producción**: degradado — responde lento (7.4 s)"
+    },
     {
       "cuando": "2026-08-27T16:47:15.402Z",
       "ambiente": "devapp",
