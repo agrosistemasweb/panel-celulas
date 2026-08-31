@@ -1,16 +1,16 @@
 {
-  "actualizado": "2026-08-31T08:54:42.554Z",
+  "actualizado": "2026-08-31T09:04:27.405Z",
   "ambientes": {
     "produccion": {
       "nombre": "Producción",
       "url": "https://app.agrosistemas.com.ar",
-      "estado": "degradado",
-      "detalle": "responde lento (7.4 s)",
+      "estado": "ok",
+      "detalle": "responde en 1.6 s",
       "httpStatus": 200,
-      "ms": 7396,
+      "ms": 1636,
       "huella": "730b9905c353",
-      "desde": "2026-08-31T08:54:42.554Z",
-      "ultimoChequeo": "2026-08-31T08:54:42.554Z",
+      "desde": "2026-08-31T09:04:27.405Z",
+      "ultimoChequeo": "2026-08-31T09:04:27.405Z",
       "ultimoDeploy": null,
       "fallosSeguidos": 0,
       "intentos": 1
@@ -19,12 +19,12 @@
       "nombre": "Stage",
       "url": "https://stage.agrosistemas.com.ar",
       "estado": "ok",
-      "detalle": "responde en 0.6 s",
+      "detalle": "responde en 0.7 s",
       "httpStatus": 200,
-      "ms": 638,
+      "ms": 702,
       "huella": "396dadf5c0b9",
       "desde": "2026-08-27T16:47:15.402Z",
-      "ultimoChequeo": "2026-08-31T08:54:42.554Z",
+      "ultimoChequeo": "2026-08-31T09:04:27.405Z",
       "ultimoDeploy": "2026-08-27T16:47:15.402Z",
       "fallosSeguidos": 0,
       "intentos": 1
@@ -33,18 +33,26 @@
       "nombre": "Devapp",
       "url": "https://devapp.agrosistemas.com.ar",
       "estado": "ok",
-      "detalle": "responde en 4.3 s",
+      "detalle": "responde en 0.8 s",
       "httpStatus": 200,
-      "ms": 4297,
+      "ms": 783,
       "huella": "0f0e03431286",
       "desde": "2026-08-27T16:47:15.402Z",
-      "ultimoChequeo": "2026-08-31T08:54:42.554Z",
+      "ultimoChequeo": "2026-08-31T09:04:27.405Z",
       "ultimoDeploy": "2026-08-27T16:47:15.402Z",
       "fallosSeguidos": 0,
       "intentos": 1
     }
   },
   "historial": [
+    {
+      "cuando": "2026-08-31T09:04:27.405Z",
+      "ambiente": "produccion",
+      "estado": "ok",
+      "detalle": "responde en 1.6 s",
+      "deployTermino": false,
+      "texto": "🟢 **Producción**: recuperado (venía de 🟡 Degradado) — responde en 1.6 s"
+    },
     {
       "cuando": "2026-08-31T08:54:42.554Z",
       "ambiente": "produccion",
