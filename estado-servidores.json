@@ -1,16 +1,16 @@
 {
-  "actualizado": "2026-08-31T20:29:04.389Z",
+  "actualizado": "2026-08-31T20:38:22.289Z",
   "ambientes": {
     "produccion": {
       "nombre": "Producción",
       "url": "https://app.agrosistemas.com.ar",
       "estado": "ok",
-      "detalle": "responde en 1.4 s",
+      "detalle": "responde en 1.7 s",
       "httpStatus": 200,
-      "ms": 1448,
+      "ms": 1682,
       "huella": "730b9905c353",
       "desde": "2026-08-31T09:04:27.405Z",
-      "ultimoChequeo": "2026-08-31T20:29:04.389Z",
+      "ultimoChequeo": "2026-08-31T20:38:22.289Z",
       "ultimoDeploy": null,
       "fallosSeguidos": 0,
       "intentos": 1
@@ -19,13 +19,13 @@
       "nombre": "Stage",
       "url": "https://stage.agrosistemas.com.ar",
       "estado": "ok",
-      "detalle": "responde en 1.0 s",
+      "detalle": "versión nueva publicada (build 58f8ca7ad2b7)",
       "httpStatus": 200,
-      "ms": 1032,
-      "huella": "396dadf5c0b9",
-      "desde": "2026-08-27T16:47:15.402Z",
-      "ultimoChequeo": "2026-08-31T20:29:04.389Z",
-      "ultimoDeploy": "2026-08-27T16:47:15.402Z",
+      "ms": 663,
+      "huella": "58f8ca7ad2b7",
+      "desde": "2026-08-31T20:38:22.289Z",
+      "ultimoChequeo": "2026-08-31T20:38:22.289Z",
+      "ultimoDeploy": "2026-08-31T20:38:22.289Z",
       "fallosSeguidos": 0,
       "intentos": 1
     },
@@ -33,18 +33,26 @@
       "nombre": "Devapp",
       "url": "https://devapp.agrosistemas.com.ar",
       "estado": "ok",
-      "detalle": "responde en 1.0 s",
+      "detalle": "responde en 0.8 s",
       "httpStatus": 200,
-      "ms": 995,
+      "ms": 786,
       "huella": "0f0e03431286",
       "desde": "2026-08-27T16:47:15.402Z",
-      "ultimoChequeo": "2026-08-31T20:29:04.389Z",
+      "ultimoChequeo": "2026-08-31T20:38:22.289Z",
       "ultimoDeploy": "2026-08-27T16:47:15.402Z",
       "fallosSeguidos": 0,
       "intentos": 1
     }
   },
   "historial": [
+    {
+      "cuando": "2026-08-31T20:38:22.289Z",
+      "ambiente": "stage",
+      "estado": "ok",
+      "detalle": "versión nueva publicada (build 58f8ca7ad2b7)",
+      "deployTermino": true,
+      "texto": "✅ **Stage**: deploy terminado — versión nueva publicada (build 58f8ca7ad2b7)"
+    },
     {
       "cuando": "2026-08-31T09:04:27.405Z",
       "ambiente": "produccion",
