@@ -1,50 +1,74 @@
 {
-  "actualizado": "2026-09-07T22:59:26.435Z",
+  "actualizado": "2026-09-07T23:17:16.771Z",
   "ambientes": {
     "produccion": {
       "nombre": "Producción",
       "url": "https://app.agrosistemas.com.ar",
-      "estado": "degradado",
-      "detalle": "no respondió en este chequeo (sin respuesta en 20000 ms) — se confirma en el próximo",
-      "httpStatus": 0,
-      "ms": 20000,
+      "estado": "ok",
+      "detalle": "responde en 1.8 s",
+      "httpStatus": 200,
+      "ms": 1838,
       "huella": "730b9905c353",
-      "desde": "2026-09-07T22:46:27.821Z",
-      "ultimoChequeo": "2026-09-07T22:59:26.435Z",
+      "desde": "2026-09-07T23:17:16.771Z",
+      "ultimoChequeo": "2026-09-07T23:17:16.771Z",
       "ultimoDeploy": null,
-      "fallosSeguidos": 1,
-      "intentos": 3
+      "fallosSeguidos": 0,
+      "intentos": 1
     },
     "stage": {
       "nombre": "Stage",
       "url": "https://stage.agrosistemas.com.ar",
-      "estado": "degradado",
-      "detalle": "responde lento (12.9 s)",
+      "estado": "ok",
+      "detalle": "responde en 1.5 s",
       "httpStatus": 200,
-      "ms": 12948,
+      "ms": 1528,
       "huella": "a801507c678b",
-      "desde": "2026-09-07T22:52:57.124Z",
-      "ultimoChequeo": "2026-09-07T22:59:26.435Z",
+      "desde": "2026-09-07T23:17:16.771Z",
+      "ultimoChequeo": "2026-09-07T23:17:16.771Z",
       "ultimoDeploy": "2026-09-02T18:25:05.259Z",
       "fallosSeguidos": 0,
-      "intentos": 2
+      "intentos": 1
     },
     "devapp": {
       "nombre": "Devapp",
       "url": "https://devapp.agrosistemas.com.ar",
-      "estado": "deployando",
-      "detalle": "el servidor devuelve 504 (contenedor reiniciando)",
-      "httpStatus": 504,
-      "ms": 12747,
+      "estado": "ok",
+      "detalle": "responde en 1.0 s",
+      "httpStatus": 200,
+      "ms": 979,
       "huella": "0f0e03431286",
-      "desde": "2026-09-07T22:59:26.435Z",
-      "ultimoChequeo": "2026-09-07T22:59:26.435Z",
+      "desde": "2026-09-07T23:17:16.771Z",
+      "ultimoChequeo": "2026-09-07T23:17:16.771Z",
       "ultimoDeploy": "2026-08-27T16:47:15.402Z",
       "fallosSeguidos": 0,
-      "intentos": 3
+      "intentos": 1
     }
   },
   "historial": [
+    {
+      "cuando": "2026-09-07T23:17:16.771Z",
+      "ambiente": "devapp",
+      "estado": "ok",
+      "detalle": "responde en 1.0 s",
+      "deployTermino": false,
+      "texto": "✅ **Devapp**: volvió a estar en servicio después del deploy — responde en 1.0 s"
+    },
+    {
+      "cuando": "2026-09-07T23:17:16.771Z",
+      "ambiente": "stage",
+      "estado": "ok",
+      "detalle": "responde en 1.5 s",
+      "deployTermino": false,
+      "texto": "🟢 **Stage**: recuperado (venía de 🟡 Degradado) — responde en 1.5 s"
+    },
+    {
+      "cuando": "2026-09-07T23:17:16.771Z",
+      "ambiente": "produccion",
+      "estado": "ok",
+      "detalle": "responde en 1.8 s",
+      "deployTermino": false,
+      "texto": "🟢 **Producción**: recuperado (venía de 🟡 Degradado) — responde en 1.8 s"
+    },
     {
       "cuando": "2026-09-07T22:59:26.435Z",
       "ambiente": "devapp",
