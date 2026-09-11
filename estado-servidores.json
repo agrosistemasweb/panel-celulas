@@ -1,5 +1,5 @@
 {
-  "actualizado": "2026-09-11T23:17:10.409Z",
+  "actualizado": "2026-09-11T23:25:21.929Z",
   "ambientes": {
     "produccion": {
       "nombre": "Producción",
@@ -7,10 +7,10 @@
       "estado": "ok",
       "detalle": "responde en 1.5 s",
       "httpStatus": 200,
-      "ms": 1516,
+      "ms": 1451,
       "huella": "730b9905c353",
       "desde": "2026-09-07T23:17:16.771Z",
-      "ultimoChequeo": "2026-09-11T23:17:10.409Z",
+      "ultimoChequeo": "2026-09-11T23:25:21.929Z",
       "ultimoDeploy": null,
       "fallosSeguidos": 0,
       "intentos": 1
@@ -19,12 +19,12 @@
       "nombre": "Stage",
       "url": "https://stage.agrosistemas.com.ar",
       "estado": "ok",
-      "detalle": "responde en 0.7 s",
+      "detalle": "responde en 0.9 s",
       "httpStatus": 200,
-      "ms": 739,
+      "ms": 865,
       "huella": "a801507c678b",
       "desde": "2026-09-07T23:17:16.771Z",
-      "ultimoChequeo": "2026-09-11T23:17:10.409Z",
+      "ultimoChequeo": "2026-09-11T23:25:21.929Z",
       "ultimoDeploy": "2026-09-02T18:25:05.259Z",
       "fallosSeguidos": 0,
       "intentos": 1
@@ -35,10 +35,10 @@
       "estado": "ok",
       "detalle": "responde en 0.7 s",
       "httpStatus": 200,
-      "ms": 707,
+      "ms": 729,
       "huella": "0f0e03431286",
       "desde": "2026-09-07T23:17:16.771Z",
-      "ultimoChequeo": "2026-09-11T23:17:10.409Z",
+      "ultimoChequeo": "2026-09-11T23:25:21.929Z",
       "ultimoDeploy": "2026-08-27T16:47:15.402Z",
       "fallosSeguidos": 0,
       "intentos": 1
