@@ -1,16 +1,16 @@
 {
-  "actualizado": "2026-09-13T00:59:21.791Z",
+  "actualizado": "2026-09-13T01:33:00.744Z",
   "ambientes": {
     "produccion": {
       "nombre": "Producción",
       "url": "https://app.agrosistemas.com.ar",
       "estado": "ok",
-      "detalle": "responde en 1.0 s",
+      "detalle": "responde en 0.7 s",
       "httpStatus": 200,
-      "ms": 963,
+      "ms": 678,
       "huella": "730b9905c353",
       "desde": "2026-09-07T23:17:16.771Z",
-      "ultimoChequeo": "2026-09-13T00:59:21.791Z",
+      "ultimoChequeo": "2026-09-13T01:33:00.744Z",
       "ultimoDeploy": null,
       "fallosSeguidos": 0,
       "intentos": 1
@@ -21,10 +21,10 @@
       "estado": "ok",
       "detalle": "responde en 0.6 s",
       "httpStatus": 200,
-      "ms": 582,
+      "ms": 580,
       "huella": "a801507c678b",
       "desde": "2026-09-07T23:17:16.771Z",
-      "ultimoChequeo": "2026-09-13T00:59:21.791Z",
+      "ultimoChequeo": "2026-09-13T01:33:00.744Z",
       "ultimoDeploy": "2026-09-02T18:25:05.259Z",
       "fallosSeguidos": 0,
       "intentos": 1
@@ -35,10 +35,10 @@
       "estado": "ok",
       "detalle": "responde en 0.5 s",
       "httpStatus": 200,
-      "ms": 546,
+      "ms": 530,
       "huella": "0f0e03431286",
       "desde": "2026-09-07T23:17:16.771Z",
-      "ultimoChequeo": "2026-09-13T00:59:21.791Z",
+      "ultimoChequeo": "2026-09-13T01:33:00.744Z",
       "ultimoDeploy": "2026-08-27T16:47:15.402Z",
       "fallosSeguidos": 0,
       "intentos": 1
