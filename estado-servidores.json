@@ -1,5 +1,5 @@
 {
-  "actualizado": "2026-09-19T20:48:01.749Z",
+  "actualizado": "2026-09-19T20:54:25.505Z",
   "ambientes": {
     "produccion": {
       "nombre": "Producción",
@@ -7,10 +7,10 @@
       "estado": "ok",
       "detalle": "responde en 1.9 s",
       "httpStatus": 200,
-      "ms": 1886,
+      "ms": 1864,
       "huella": "730b9905c353",
       "desde": "2026-09-14T14:42:04.425Z",
-      "ultimoChequeo": "2026-09-19T20:48:01.749Z",
+      "ultimoChequeo": "2026-09-19T20:54:25.505Z",
       "ultimoDeploy": null,
       "fallosSeguidos": 0,
       "intentos": 1
@@ -21,10 +21,10 @@
       "estado": "ok",
       "detalle": "responde en 0.9 s",
       "httpStatus": 200,
-      "ms": 857,
+      "ms": 916,
       "huella": "a801507c678b",
       "desde": "2026-09-07T23:17:16.771Z",
-      "ultimoChequeo": "2026-09-19T20:48:01.749Z",
+      "ultimoChequeo": "2026-09-19T20:54:25.505Z",
       "ultimoDeploy": "2026-09-02T18:25:05.259Z",
       "fallosSeguidos": 0,
       "intentos": 1
@@ -35,10 +35,10 @@
       "estado": "ok",
       "detalle": "responde en 0.8 s",
       "httpStatus": 200,
-      "ms": 757,
+      "ms": 767,
       "huella": "0f0e03431286",
       "desde": "2026-09-07T23:17:16.771Z",
-      "ultimoChequeo": "2026-09-19T20:48:01.749Z",
+      "ultimoChequeo": "2026-09-19T20:54:25.505Z",
       "ultimoDeploy": "2026-08-27T16:47:15.402Z",
       "fallosSeguidos": 0,
       "intentos": 1
