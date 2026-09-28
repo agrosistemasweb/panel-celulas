@@ -582,14 +582,14 @@ const SNAPSHOT = {
 // Buckets de estado (normalizados a minúsculas y espacios colapsados)
 const BUCKETS = [
   { key:'pendiente', label:'Pendiente / Bloqueada', color:'#94a3b8',
-    statuses:['to do','a revisar','pendiente','blockeado','blockeada','bloqueado','bloqueada','bloqueado - rev-fun','bloqueado - rev -fun','bloqueado - rev. fun','blocked'] },
+    statuses:['to do','a revisar','pendiente','blockeado','blockeada','bloqueado','bloqueada','bloqueado - rev-fun','bloqueado - rev -fun','bloqueado - rev. fun','bloqueada vb6','blocked'] },
   // "Reabierta" NO es trabajo de QA: el bug ya se pasó a los devs y queda asignado a ellos.
   { key:'reabierta', label:'Reabierta (en devs)', color:'#f97316',
     statuses:['reabiertas','reabierta','reopened'] },
   { key:'curso', label:'En curso', color:'#3b82f6',
     statuses:['in progress','en curso'] },
   { key:'revision', label:'En revisión (devs)', color:'#a855f7',
-    statuses:['review','listo para revision','listo pra revision','en revision'] },
+    statuses:['review','listo para revision','listo pra revision','listo revision','en revision'] },
   // Los únicos estados en los que trabaja QA: el resto (pendiente, en curso,
   // bloqueado, reabierta, en revisión) es trabajo de los devs.
   { key:'qa', label:'Listo para QA / En QA', color:'#f59e0b',
