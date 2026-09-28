@@ -941,8 +941,8 @@ function renderTotalizers() {
     { lbl:'Células', val:CELLS.length - 1 + ' + QA', sub:`${activas} con backlog · ${pend} sin space` },
     { lbl:'Total del programa', val:fmt(P + S), sub:`${fmt(P)} tareas · ${fmt(S)} subtareas`, ps:[['P',P],['S',S]] },
     { lbl:'Baseline Contable', val:fmt(base.parents + base.subs), sub:`${base.lists.length} sprints · referencia`, ps:[['P',base.parents],['S',base.subs]] },
-    { lbl:'Terminado / cerrado', val:fmt(done), sub:`${P+S ? Math.round(done*100/(P+S)) : 0}% del total cargado` },
-    { lbl:'Sprints cargados', val:fmt(sprints), sub:'listas activas en ClickUp' }
+    { lbl:'Terminado / cerrado', val:fmt(done), sub:'tareas + subtareas terminadas' },
+    { lbl:'% de avance', val:`${P+S ? Math.round(done*100/(P+S)) : 0}%`, sub:`${fmt(done)} de ${fmt(P+S)} · ${sprints} sprints` }
   ];
   document.getElementById('totalizers').innerHTML = cards.map(c => `
     <div class="tot-card">
@@ -1024,7 +1024,7 @@ function cellCard(r) {
       <div class="nums">
         <div class="num-box"><div class="n">${fmt(r.parents)}</div><div class="l">Tareas</div></div>
         <div class="num-box"><div class="n">${fmt(r.subs)}</div><div class="l">Subtareas</div></div>
-        <div class="num-box"><div class="n">${r.lists.length}</div><div class="l">Sprints</div></div>
+        <div class="num-box"><div class="n">${pctDone(r)}%</div><div class="l">Avance</div></div>
       </div>
       ${t ? `<div><div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">Avance — ${pctDone(r)}% terminado · ratio ${ratio} subtareas por tarea</div>${bucketBar(r)}</div>` : ''}
       ${vs}
