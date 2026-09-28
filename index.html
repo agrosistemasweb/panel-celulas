@@ -638,7 +638,7 @@ function accesoRoto() { return LAST_ERR === 401 || LAST_ERR === 403 || LAST_ERR 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // Reintenta 429 y 5xx con backoff: el 429 es transitorio, no un fallo de datos.
-async function jget(path, tries = 4) {
+async function jget(path, tries = 5) {
   for (let i = 1; ; i++) {
     await acquire();
     let r;
@@ -650,7 +650,9 @@ async function jget(path, tries = 4) {
 
     if ((r.status === 429 || r.status >= 500) && i < tries) {
       const ra = parseFloat(r.headers.get('retry-after') || '0');
-      await sleep(ra > 0 ? ra * 1000 : 1200 * i);
+      // ClickUp tarda hasta un minuto en liberar el rate limit: con 1-4s se agotaban
+      // los reintentos y la célula quedaba en 0.
+      await sleep(ra > 0 ? ra * 1000 : (r.status === 429 ? 3000 : 1200) * i);
       continue;
     }
     LAST_ERR = r.status;
@@ -686,7 +688,9 @@ async function tasksOfList(listId) {
   while (page < 60) {
     const batch = [];
     for (let i = 0; i < PAGE_CHUNK && page < 60; i++, page++) batch.push(page);
-    const res = await Promise.all(batch.map(p => jget(pageUrl(listId, p)).catch(() => null)));
+    // Una página que falla hace fallar la lista entera: antes se cortaba ahí en silencio
+    // y el panel mostraba la lista a medias como si fuera el total.
+    const res = await Promise.all(batch.map(p => jget(pageUrl(listId, p))));
     let stop = false;
     for (const d of res) {
       if (!d || !d.tasks) { stop = true; continue; }
@@ -759,9 +763,17 @@ async function loadCell(cell) {
           else if (bk === 'terminado') row.qa.validado++;
         }
       }
+      saveLastGood(row);
       return row;
     } catch (e) {
       failed++;
+      // Si ClickUp no respondió, se muestra la última lectura buena de esa lista
+      // en lugar de dejarla en 0.
+      const prev = lastGoodOf(l.id);
+      if (prev) {
+        res.stale = (res.stale || []).concat({ name:l.name, ts:prev.ts, err:e.message });
+        return prev.row;
+      }
       res.error = (res.error ? res.error + ' · ' : '') + `${l.name}: ${e.message}`;
       return null;
     }
@@ -801,6 +813,29 @@ async function loadCell(cell) {
     }
   }
   return res;
+}
+
+// ---- Última lectura buena de cada lista (sin vencimiento): respaldo cuando ClickUp
+// devuelve 429 o no responde.
+const LASTGOOD_KEY = 'panelCelulas.listas.v1';
+function readLastGood() {
+  try { return JSON.parse(localStorage.getItem(LASTGOOD_KEY) || '{}') || {}; } catch (e) { return {}; }
+}
+function lastGoodOf(listId) {
+  const x = readLastGood()[listId];
+  if (!x || !x.row) return null;
+  x.row.buckets = normBuckets(x.row.buckets);
+  x.row.qa = Object.assign(emptyQa(), x.row.qa);
+  x.row.byUser = x.row.byUser || {};
+  x.row.sinAsignar = x.row.sinAsignar || 0;
+  return x;
+}
+function saveLastGood(row) {
+  try {
+    const all = readLastGood();
+    all[row.id] = { ts: Date.now(), row };
+    localStorage.setItem(LASTGOOD_KEY, JSON.stringify(all));
+  } catch (e) { console.warn('lastgood save', e); }
 }
 
 // ---- Caché local: la primera pintura es instantánea y la API se refresca detrás
@@ -855,7 +890,8 @@ async function loadAll(opts) {
   DATA = results;
   document.getElementById('lastUpdated').textContent = USED_SNAPSHOT
     ? `⚠ Snapshot del ${SNAPSHOT.date} (${motivoCorto()})`
-    : 'Actualizado ' + new Date().toLocaleString('es-AR');
+    : 'Actualizado ' + new Date().toLocaleString('es-AR')
+      + (DATA.some(r => r.stale) ? ' · ⚠ ClickUp no respondió: hay células con la lectura anterior' : '');
   render();
   if (!USED_SNAPSHOT) saveCache();
 }
@@ -1030,9 +1066,21 @@ function cellCard(r) {
       ${vs}
       ${sprints}`}
       ${note}
+      ${staleNote(r)}
       ${r.error ? `<div class="err">Error parcial: ${r.error}</div>` : ''}
     </div>
   </div>`;
+}
+
+// Aviso de listas mostradas con su última lectura buena porque ClickUp no respondió
+function staleNote(r) {
+  if (!r.stale || !r.stale.length) return '';
+  const errs = [...new Set(r.stale.map(x => x.err))].join(', ');
+  const cuando = ts => new Date(ts).toLocaleString('es-AR');
+  const detalle = r.stale.length === r.lists.length
+    ? `toda la célula muestra la lectura del ${cuando(Math.min(...r.stale.map(x => x.ts)))}`
+    : r.stale.map(x => `<b>${x.name}</b> muestra la lectura del ${cuando(x.ts)}`).join(' · ');
+  return `<div class="note">ClickUp no respondió (${errs}): ${detalle}.</div>`;
 }
 
 function renderCelulas() {
