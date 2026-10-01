@@ -218,9 +218,10 @@ const CELLS = [
     url:'https://app.clickup.com/9013241237/v/o/s/901313967858',
     folders:['901318743397'], lists:[], members:[90708484, 82082180] },
 
-  { n:4, module:'Contable', hex:'#6366f1', space:'901312454479', spaceName:'Modulo Contable App',
-    url:'https://app.clickup.com/9013241237/v/o/s/901312454479',
-    folders:['901316203875'], lists:[], members:[82053721, 118014033], baseline:true },
+  // Contable se rehace desde cero (como Cereales): la tarjeta principal lee el space nuevo.
+  { n:4, module:'Contable', hex:'#6366f1', space:'1400450000000604', spaceName:'Qa - Modulo Contable',
+    url:'https://app.clickup.com/9013241237/v/l/li/1400450000002325',
+    folders:['1400450000001488'], lists:[], members:[82053721, 118014033] },
 
   { n:5, module:'Cereales', hex:'#eab308', space:'901313750767', spaceName:'Modulo Cereales App',
     url:'https://app.clickup.com/9013241237/v/o/s/901313750767',
@@ -228,8 +229,16 @@ const CELLS = [
 
   { n:'QA', module:'QA — todos los módulos', hex:'#a855f7', space:null,
     spaceName:'Prueba todo lo que entregan las células', url:null,
-    folders:[], lists:[], members:[174607180, 118075668], qa:true }
+    folders:[], lists:[], members:[174607180, 118075668], qa:true },
+
+  // Referencia de comparación: el Contable original (8 sprints). Sólo se usa como
+  // baseline y en la pestaña Comparativa; NO es una célula ni suma a los totales.
+  { n:'Ref', module:'Contable original', hex:'#818cf8', space:'901312454479', spaceName:'Modulo Contable App',
+    url:'https://app.clickup.com/9013241237/v/o/s/901312454479',
+    folders:['901316203875'], lists:[], members:[82053721, 118014033], baseline:true, ref:true }
 ];
+// Células reales (sin la referencia de comparación)
+const isCell = r => !(r.cell || r).ref;
 
 // Fallback de listas por folder si el endpoint /api/folder/:id/list no responde
 const FALLBACK_LISTS = {
@@ -242,6 +251,9 @@ const FALLBACK_LISTS = {
     {id:'901327168887', name:'Sprint 6 Modulo Contable'},
     {id:'901327484231', name:'Sprint 7 Modulo Contable'},
     {id:'901327759271', name:'Sprint 8 Modulo Contable'}
+  ],
+  '1400450000001488': [
+    {id:'1400450000002325', name:'Sprint 1 Contable'}
   ],
   '901317973248': [
     {id:'901327585431', name:'Sprint 1 Qa Pruebas'},
@@ -839,7 +851,7 @@ function saveLastGood(row) {
 }
 
 // ---- Caché local: la primera pintura es instantánea y la API se refresca detrás
-const CACHE_KEY = 'panelCelulas.v2';
+const CACHE_KEY = 'panelCelulas.v3';
 const CACHE_TTL = 15 * 60 * 1000;
 
 function emptyRow(cell) {
@@ -905,7 +917,7 @@ function baseline() { return DATA.find(r => r.cell.baseline) || { parents:0, sub
 
 // Carga de la célula QA: sólo tarjetas asignadas a QA, sin las reabiertas (esas ya están en devs)
 function qaStats() {
-  const real = DATA.filter(r => r.cell.space && !r.cell.qa);
+  const real = DATA.filter(r => isCell(r) && r.cell.space && !r.cell.qa);
   const out = { cola:0, porCaer:0, validado:0, reabiertas:0, modulos:real.length, porLista:[] };
   for (const r of real) {
     const q = Object.assign(emptyQa(), r.qa);
@@ -965,18 +977,18 @@ function bucketBar(r) {
 // ============================================================
 function renderTotalizers() {
   const base = baseline();
-  const real = DATA.filter(r => r.cell.space && !r.cell.qa);
+  const real = DATA.filter(r => isCell(r) && r.cell.space && !r.cell.qa);
   const P = real.reduce((a,r) => a + r.parents, 0);
   const S = real.reduce((a,r) => a + r.subs, 0);
   const done = real.reduce((a,r) => a + doneOf(r), 0);
   const sprints = real.reduce((a,r) => a + r.lists.length, 0);
-  const activas = DATA.filter(r => r.cell.space).length;
-  const pend = CELLS.filter(c => !c.space && !c.qa).length;
+  const activas = DATA.filter(r => isCell(r) && r.cell.space).length;
+  const pend = CELLS.filter(c => isCell(c) && !c.space && !c.qa).length;
 
   const cards = [
-    { lbl:'Células', val:CELLS.length - 1 + ' + QA', sub:`${activas} con backlog · ${pend} sin space` },
+    { lbl:'Células', val:CELLS.filter(isCell).length - 1 + ' + QA', sub:`${activas} con backlog · ${pend} sin space` },
     { lbl:'Total del programa', val:fmt(P + S), sub:`${fmt(P)} tareas · ${fmt(S)} subtareas`, ps:[['P',P],['S',S]] },
-    { lbl:'Baseline Contable', val:fmt(base.parents + base.subs), sub:`${base.lists.length} sprints · referencia`, ps:[['P',base.parents],['S',base.subs]] },
+    { lbl:'Baseline Contable', val:fmt(base.parents + base.subs), sub:`Contable original · ${base.lists.length} sprints · referencia`, ps:[['P',base.parents],['S',base.subs]] },
     { lbl:'Terminado / cerrado', val:fmt(done), sub:'tareas + subtareas terminadas' },
     { lbl:'% de avance', val:`${P+S ? Math.round(done*100/(P+S)) : 0}%`, sub:`${fmt(done)} de ${fmt(P+S)} · ${sprints} sprints` }
   ];
@@ -1004,7 +1016,7 @@ function cellCard(r) {
 
   const vs = (c.baseline || !has) ? '' : `
     <div class="vs-box">
-      <div class="vs-title">Volumen vs Módulo Contable (baseline)</div>
+      <div class="vs-title">Volumen vs Contable original (baseline)</div>
       ${[['Tareas',vsP,r.parents,base.parents],['Subtareas',vsS,r.subs,base.subs],['Total',vsT,t,base.parents+base.subs]].map(([l,p,v,b]) => `
         <div class="vs-row">
           <span class="vs-lbl">${l}</span>
@@ -1084,7 +1096,7 @@ function staleNote(r) {
 }
 
 function renderCelulas() {
-  return `<div class="cells-grid">${DATA.map(cellCard).join('')}</div>`;
+  return `<div class="cells-grid">${DATA.filter(isCell).map(cellCard).join('')}</div>`;
 }
 
 // ============================================================
@@ -1099,7 +1111,7 @@ function renderComparativa() {
   const chart = `
   <div class="chart-card">
     <h2>Volumen de trabajo por módulo</h2>
-    <div class="hint">Barra proporcional al total de tarjetas (tareas + subtareas). El Módulo Contable es la referencia: ${fmt(base.parents)} tareas y ${fmt(base.subs)} subtareas en ${base.lists.length} sprints.</div>
+    <div class="hint">Barra proporcional al total de tarjetas (tareas + subtareas). El Contable original es la referencia: ${fmt(base.parents)} tareas y ${fmt(base.subs)} subtareas en ${base.lists.length} sprints.</div>
     ${rows.map(r => {
       const t = total(r);
       const w = t * 100 / max;
@@ -1153,7 +1165,7 @@ function renderComparativa() {
     </tr>`;
   }).join('');
 
-  const real = DATA.filter(r => r.cell.space && !r.cell.qa);
+  const real = DATA.filter(r => isCell(r) && r.cell.space && !r.cell.qa);
   const tp = real.reduce((a,r)=>a+r.parents,0), ts = real.reduce((a,r)=>a+r.subs,0), td = real.reduce((a,r)=>a+doneOf(r),0);
   const foot = `<tr class="tot"><td colspan="3">TOTAL con backlog cargado</td>
     <td class="num">${real.reduce((a,r)=>a+r.lists.length,0)}</td>
@@ -1168,7 +1180,7 @@ function renderComparativa() {
 // RENDER — Detalle por sprint
 // ============================================================
 function renderDetalle() {
-  const rows = DATA.filter(r => r.cell.space);
+  const rows = DATA.filter(r => isCell(r) && r.cell.space);
   if (!rows.length) return '<div class="note">No hay módulos con backlog cargado.</div>';
   return rows.map(r => `
     <div class="section-title"><span class="sq" style="display:inline-block;width:11px;height:11px;border-radius:3px;background:${r.cell.hex}"></span>
