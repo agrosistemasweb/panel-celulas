@@ -985,7 +985,7 @@ function viewOf(r, env) {
   if (env !== 'ramas' && !r.cell.qa) {
     const tiene = lists.length > 0;
     v.reprueba = true;
-    v.universo = tiene ? r.lists.reduce((a, l) => a + (l.parents || 0), 0) : 0;
+    v.universo = 0;   // = tareas del sprint del ambiente (movidas o creadas ahí), igual que ClickUp
     v.doneP = 0; v.donePp = 0; v.donePs = 0; v.reabiertasAmb = 0; v.subsVivas = 0;
   }
   for (const l of lists) {
@@ -996,7 +996,9 @@ function viewOf(r, env) {
       v.donePp += lb.terminado.p - vj.p;                         // probado y resuelto en este ambiente
       v.donePs += lb.terminado.s - vj.s;
       v.doneP += lb.terminado.p + lb.terminado.s - vj.p - vj.s;
-      v.subsVivas += l.subs - vj.s;                              // subtareas que aparecieron / se reprueban acá
+      v.universo += l.parents;
+      v.subsVivas += l.subs;
+      v.heredado = (v.heredado || 0) + vj.p + vj.s;              // llegó cerrado de la rama: no es avance
       v.reabiertasAmb += lb.reabierta.p + lb.reabierta.s;
     }
     const b = normBuckets(l.buckets);
@@ -1108,7 +1110,7 @@ function repruebaBar(r) {
   const enAmb = r.lists.reduce((a, l) => a + l.parents, 0) + r.subsVivas;
   const viejo = r.lists.reduce((a, l) => a + ((l.viejo || {}).p || 0) + ((l.viejo || {}).s || 0), 0);
   const segs = BUCKETS.map(b => ({ b, v:r.buckets[b.key].p + r.buckets[b.key].s - (b.key === 'terminado' ? viejo : 0) }))
-    .concat([{ b:{ label:'Todavía en la rama (sin reprobar)', color:'#475569' }, v:Math.max(U - enAmb, 0) }]);
+    .concat([{ b:{ label:'Llegó cerrado de la rama (no cuenta)', color:'#166534' }, v:viejo }]);
   return `<div class="bar">${segs.map(x => x.v ? `<div class="bar-seg" style="width:${x.v*100/U}%;background:${x.b.color}" title="${x.b.label}: ${x.v}"></div>` : '').join('')}</div>
     <div class="bar-legend">${segs.map(x => x.v ? `<span class="lg"><span class="dot" style="background:${x.b.color}"></span>${x.b.label} <b>${fmt(x.v)}</b></span>` : '').join('')}</div>`;
 }
@@ -1142,9 +1144,11 @@ function renderTotalizers() {
   // Terminado y Falta en tareas (P) y subtareas (S): Falta + Terminado = total del ambiente
   const hechoP = real.reduce((a,r) => a + (r.reprueba ? r.donePp : r.buckets.terminado.p), 0);
   const hechoS = real.reduce((a,r) => a + (r.reprueba ? r.donePs : r.buckets.terminado.s), 0);
-  const totP = amb ? U : P;
-  const totS = amb ? real.reduce((a,r) => a + (r.subsVivas || 0), 0) : S;
-  const faltaP = Math.max(totP - hechoP, 0), faltaS = Math.max(totS - hechoS, 0);
+  const totP = P, totS = S;
+  // Falta = lo que no está terminado ni cerrado (lo que llegó cerrado de la rama no falta, pero tampoco es avance)
+  const faltaP = real.reduce((a,r) => a + r.parents - r.buckets.terminado.p, 0);
+  const faltaS = real.reduce((a,r) => a + r.subs - r.buckets.terminado.s, 0);
+  const heredado = real.reduce((a,r) => a + (r.heredado || 0), 0);
   const reab = real.reduce((a,r) => a + (r.reabiertasAmb || 0), 0);
   const sprints = real.reduce((a,r) => a + r.lists.length, 0);
   const activas = DATA.filter(r => isCell(r) && r.cell.space).length;
@@ -1153,10 +1157,10 @@ function renderTotalizers() {
   const cards = [
     { lbl:'Células', val:CELLS.filter(isCell).length - 1 + ' + QA', sub:`${activas} con backlog · ${pend} sin space` },
     amb
-      ? { lbl:'Total ' + envLabel(), val:fmt(totP + totS), ps:[['P',totP],['S',totS]], sub:`${fmt(totP)} tareas a probar · ${fmt(totS)} subtareas (se conocen al reprobar) · ${fmt(reab)} reabiertas` }
+      ? { lbl:'Total ' + envLabel(), val:fmt(totP + totS), ps:[['P',totP],['S',totS]], sub:`${fmt(totP)} tareas · ${fmt(totS)} subtareas en los sprints de ${envLabel()} · ${fmt(reab)} reabiertas` }
       : { lbl:'Total ' + envLabel(), val:fmt(P + S), sub:`${fmt(P)} tareas · ${fmt(S)} subtareas`, ps:[['P',P],['S',S]] },
     { lbl:'Falta (abiertas)', val:fmt(faltaP + faltaS), sub:`tareas + subtareas sin terminar ni cerrar en ${envLabel()}`, ps:[['P',faltaP],['S',faltaS]] },
-    { lbl:'Terminado / cerrado', val:fmt(hechoP + hechoS), sub: amb ? 'tareas + subtareas resueltas en ' + envLabel() : 'tareas + subtareas terminadas', ps:[['P',hechoP],['S',hechoS]] },
+    { lbl:'Terminado / cerrado', val:fmt(hechoP + hechoS), sub: amb ? `resueltas en ${envLabel()} desde el inicio del sprint${heredado ? ` · ${fmt(heredado)} llegaron cerradas de la rama (no cuentan)` : ''}` : 'tareas + subtareas terminadas', ps:[['P',hechoP],['S',hechoS]] },
     { lbl:'% de avance ' + envLabel(), val:`${(amb ? B : P+S) ? Math.round(done*100/(amb ? B : P+S)) : 0}%`, sub:`${fmt(done)} de ${fmt(amb ? B : P+S)} ${amb ? 'tareas + subtareas' : ''} · ${sprints} sprints` }
   ];
   if (cargandoAlgo()) cards.slice(1).forEach(c => { c.val = '…'; c.sub = 'leyendo los sprints de ClickUp…'; delete c.ps; });
@@ -1245,7 +1249,7 @@ function cellCard(r) {
         <div class="num-box"><div class="n">${fmt(r.reabiertasAmb)}</div><div class="l">Reabiertas</div></div>
         <div class="num-box"><div class="n">${pctDone(r)}%</div><div class="l">Avance</div></div>
       </div>
-      ${r.universo ? `<div><div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">Avance — ${fmt(r.doneP)} de ${fmt(baseDe(r))} resueltas en ${envLabel()} (${fmt(r.universo)} tareas + ${fmt(r.subsVivas)} subtareas, se conocen al reprobar)</div>${repruebaBar(r)}</div>` : ''}` : `
+      ${r.universo ? `<div><div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">Avance — ${fmt(r.doneP)} de ${fmt(baseDe(r))} resueltas en ${envLabel()} desde el inicio del sprint${r.heredado ? ` · ${fmt(r.heredado)} llegaron cerradas de la rama` : ''}</div>${repruebaBar(r)}</div>` : ''}` : `
       <div class="nums">
         <div class="num-box"><div class="n">${fmt(r.parents)}</div><div class="l">Tareas</div></div>
         <div class="num-box"><div class="n">${fmt(r.subs)}</div><div class="l">Subtareas</div></div>
