@@ -24,15 +24,11 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif
 .btn.active { background:var(--accent); border-color:var(--accent); color:white; }
 .last-updated { font-size:12px; color:var(--text-muted); }
 
-/* Filtro general por ambiente */
-.envbar { display:flex; gap:8px; padding:14px 24px 0; flex-wrap:wrap; align-items:center; }
-.envbar .env-lbl { font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.5px; margin-right:4px; }
-.env-btn { background:var(--surface2); border:1px solid var(--border); color:var(--text); padding:9px 18px; border-radius:10px; cursor:pointer; font-size:13px; font-weight:700; letter-spacing:.4px; display:flex; align-items:center; gap:8px; transition:all .2s; }
-.env-btn:hover { background:var(--border); }
-.env-btn .env-n { font-size:11px; font-weight:600; color:var(--text-muted); background:var(--bg); border-radius:6px; padding:1px 7px; }
-.env-btn.active { background:var(--accent); border-color:var(--accent); color:white; }
-.env-btn.active .env-n { color:white; background:rgba(0,0,0,.25); }
-@media (max-width:600px) { .envbar { padding:12px 16px 0; } .env-btn { padding:8px 12px; font-size:12px; } }
+/* Filtro general por ambiente: mismos botones que Exportar CSV / Actualizar */
+.header-actions { flex-wrap:wrap; }
+.envbar { display:flex; gap:6px; align-items:center; flex-wrap:wrap; padding-right:10px; border-right:1px solid var(--border); }
+.env-btn .env-n { font-size:11px; color:var(--text-muted); margin-left:6px; }
+.env-btn.active .env-n { color:rgba(255,255,255,.85); }
 
 .tabs { display:flex; gap:4px; padding:12px 24px 0; border-bottom:1px solid var(--border); flex-wrap:wrap; }
 .tab { padding:10px 18px; background:transparent; border:none; color:var(--text-muted); cursor:pointer; font-size:13px; font-weight:500; border-bottom:2px solid transparent; transition:all .2s; }
@@ -174,12 +170,11 @@ a.link:hover { text-decoration:underline; }
   <h1>Panel Células <span class="badge" id="hdrBadge">Módulos AgroSistemas</span></h1>
   <div class="header-actions">
     <span class="last-updated" id="lastUpdated">—</span>
+    <div class="envbar" id="envbar"></div>
     <button class="btn" id="exportCsvBtn">Exportar CSV</button>
     <button class="btn" id="refreshBtn">Actualizar</button>
   </div>
 </div>
-
-<div class="envbar" id="envbar"></div>
 
 <div class="totalizers" id="totalizers"></div>
 
@@ -220,20 +215,20 @@ const PEOPLE = {
 const CELLS = [
   { n:1, module:'Insumos',  hex:'#22c55e', space:'901313732567', spaceName:'QA - Modulo Insumos App',
     url:'https://app.clickup.com/9013241237/v/o/s/901313732567',
-    folders:['901317973248'], lists:[], members:[87928772, 89102522] },
+    folders:['901317973248'], lists:[{id:'1400450000005495', name:'DEVAPP 07/10'}], members:[87928772, 89102522] },
 
   { n:2, module:'Fletes',   hex:'#06b6d4', space:'901313967832', spaceName:'QA - Modulo Fletes',
     url:'https://app.clickup.com/9013241237/v/o/s/901313967832',
-    folders:['901318743353'], lists:[], members:[120292638, 82082258] },
+    folders:['901318743353'], lists:[{id:'1400450000005500', name:'DEVAPP -08/10'}], members:[120292638, 82082258] },
 
   { n:3, module:'Sueldos',  hex:'#f59e0b', space:'901313967858', spaceName:'QA - Modulo Sueldos',
     url:'https://app.clickup.com/9013241237/v/o/s/901313967858',
-    folders:['901318743397'], lists:[], members:[90708484, 82082180] },
+    folders:['901318743397'], lists:[{id:'1400450000005523', name:'DEVAPP 07/10'}], members:[90708484, 82082180] },
 
   // Contable se rehace desde cero (como Cereales): la tarjeta principal lee el space nuevo.
   { n:4, module:'Contable', hex:'#6366f1', space:'1400450000000604', spaceName:'Qa - Modulo Contable',
     url:'https://app.clickup.com/9013241237/v/l/li/1400450000002325',
-    folders:['1400450000001488'], lists:[], members:[82053721, 118014033],
+    folders:['1400450000001488'], lists:[{id:'1400450000002325', name:'DEVAPP -07/10'}], members:[82053721, 118014033],
     // Contable nunca tuvo rama separada: se prueba en devapp, y RAMAS muestra lo mismo.
     tambienEn:{ ramas:['devapp'] } },
 
@@ -783,6 +778,8 @@ async function loadCell(cell) {
 
   let lists = [...cell.lists];
   for (const f of cell.folders) lists.push(...await listsOfFolder(f));
+  // las listas DEVAPP están fijas en CELLS (links de Lorena) y además vienen en el folder: una sola vez
+  lists = lists.filter((l, i) => lists.findIndex(x => x.id === l.id) === i);
   // ordenar por número de sprint si lo tiene
   lists.sort((a,b) => {
     const na = parseInt((a.name.match(/\d+/) || ['0'])[0]);
@@ -909,7 +906,7 @@ const CACHE_TTL = 15 * 60 * 1000;
 
 function emptyRow(cell) {
   return { cell, lists:[], parents:0, subs:0, buckets:emptyBuckets(), qa:emptyQa(),
-           byUser:{}, sinAsignar:0, error:null };
+           byUser:{}, sinAsignar:0, error:null, cargando:true };
 }
 
 function saveCache() {
@@ -1040,13 +1037,16 @@ function comienzoDe(r) {
 }
 const fmtFecha = ms => new Date(ms).toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric' });
 
+// Mientras alguna célula no terminó de leer ClickUp no se muestran números (eran ceros falsos).
+function cargandoAlgo() { return RAW.some(r => r.cargando && r.cell.space && !r.cell.qa); }
+
 function envLabel(k) { return (ENVS.find(e => e.key === (k || ENV)) || ENVS[0]).label; }
 
 function renderEnvbar() {
   const real = RAW.filter(r => isCell(r) && r.cell.space && !r.cell.qa);
-  document.getElementById('envbar').innerHTML = '<span class="env-lbl">Ambiente</span>' + ENVS.map(e => {
+  document.getElementById('envbar').innerHTML = ENVS.map(e => {
     const n = real.map(r => viewOf(r, e.key)).reduce((a, r) => a + (r.reprueba ? baseDe(r) : r.parents + r.subs), 0);
-    return `<button class="env-btn ${e.key === ENV ? 'active' : ''}" data-env="${e.key}">${e.label}<span class="env-n">${fmt(n)}</span></button>`;
+    return `<button class="btn env-btn ${e.key === ENV ? 'active' : ''}" data-env="${e.key}">${e.label}<span class="env-n">${cargandoAlgo() ? '…' : fmt(n)}</span></button>`;
   }).join('');
   document.getElementById('hdrBadge').textContent = 'Ambiente ' + envLabel();
 }
@@ -1159,6 +1159,7 @@ function renderTotalizers() {
     { lbl:'Terminado / cerrado', val:fmt(hechoP + hechoS), sub: amb ? 'tareas + subtareas resueltas en ' + envLabel() : 'tareas + subtareas terminadas', ps:[['P',hechoP],['S',hechoS]] },
     { lbl:'% de avance ' + envLabel(), val:`${(amb ? B : P+S) ? Math.round(done*100/(amb ? B : P+S)) : 0}%`, sub:`${fmt(done)} de ${fmt(amb ? B : P+S)} ${amb ? 'tareas + subtareas' : ''} · ${sprints} sprints` }
   ];
+  if (cargandoAlgo()) cards.slice(1).forEach(c => { c.val = '…'; c.sub = 'leyendo los sprints de ClickUp…'; delete c.ps; });
   document.getElementById('totalizers').innerHTML = cards.map(c => `
     <div class="tot-card">
       <div class="tot-label">${c.lbl}</div>
@@ -1203,8 +1204,7 @@ function cellCard(r) {
 
   let note = '';
   if (c.qa) note = `<div class="note">Célula transversal: valida <b>todos</b> los módulos. QA trabaja únicamente en <b>Listo para QA</b> y <b>En QA</b>, y sólo suma lo que está <b>asignado a Lorena o a Laura Mignanelli</b>: si la tarjeta no está a nombre de ellas, no cuenta. Pendiente, en curso, bloqueado, en revisión y reabierta son estados de los devs.</div>`;
-  else if (has && !c.ref && !r.lists.length && !r.error && r.reprueba) note = `<div class="note">${c.module} no tiene sprint de <b>${envLabel()}</b>. Apenas se cree en ClickUp una lista que empiece con <b>${envLabel()}</b> en el space del módulo, entra con todas sus tareas a probar.</div>`;
-  else if (has && !c.ref && !r.lists.length && !r.error) note = `<div class="note">Todavía no hay sprint de <b>${envLabel()}</b> para ${c.module}. Apenas se cree en ClickUp una lista que empiece con <b>${envLabel()}</b> dentro del space del módulo, el panel la levanta sola.</div>`;
+  else if (r.cargando) note = '';
   else if (!has) note = `<div class="note">Sin space en ClickUp todavía. Apenas se cree el space del módulo <b>${c.module}</b>, agregar su id en <code>CELLS</code> y el panel lo levanta solo.</div>`;
 
   let qaLoad = '';
@@ -1235,9 +1235,10 @@ function cellCard(r) {
       </div>
     </div>
     <div class="cell-body">
-      <div class="members">${memberChips(c.members, has ? r.byUser : null)}</div>
+      ${r.cargando && has && !c.qa ? `<div class="loading" style="padding:28px 10px"><div class="spinner"></div>Cargando sprints de ${envLabel()} desde ClickUp…</div>` : ''}
+      <div class="members">${memberChips(c.members, has && !r.cargando ? r.byUser : null)}</div>
       ${c.qa || !has ? '' : otherAssigneeChips(r)}
-      ${c.qa ? qaLoad : r.reprueba ? `
+      ${r.cargando && has && !c.qa ? '' : c.qa ? qaLoad : r.reprueba ? `
       <div class="nums">
         <div class="num-box"><div class="n">${fmt(r.universo)}</div><div class="l">Tareas a probar</div></div>
         <div class="num-box"><div class="n">${fmt(r.reabiertasAmb)}</div><div class="l">Reabiertas a reprobar</div></div>
