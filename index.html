@@ -989,14 +989,16 @@ function viewOf(r, env) {
     const tiene = lists.length > 0;
     v.reprueba = true;
     v.universo = tiene ? r.lists.reduce((a, l) => a + (l.parents || 0), 0) : 0;
-    v.doneP = 0; v.reabiertasAmb = 0; v.subsVivas = 0;
+    v.doneP = 0; v.donePp = 0; v.donePs = 0; v.reabiertasAmb = 0; v.subsVivas = 0;
   }
   for (const l of lists) {
     v.parents += l.parents; v.subs += l.subs;
     if (v.reprueba) {
       const lb = normBuckets(l.buckets);
       const vj = l.viejo || { p:0, s:0 };
-      v.doneP += lb.terminado.p + lb.terminado.s - vj.p - vj.s;   // probado y resuelto en este ambiente
+      v.donePp += lb.terminado.p - vj.p;                         // probado y resuelto en este ambiente
+      v.donePs += lb.terminado.s - vj.s;
+      v.doneP += lb.terminado.p + lb.terminado.s - vj.p - vj.s;
       v.subsVivas += l.subs - vj.s;                              // subtareas que aparecieron / se reprueban acá
       v.reabiertasAmb += lb.reabierta.p + lb.reabierta.s;
     }
@@ -1043,7 +1045,7 @@ function envLabel(k) { return (ENVS.find(e => e.key === (k || ENV)) || ENVS[0]).
 function renderEnvbar() {
   const real = RAW.filter(r => isCell(r) && r.cell.space && !r.cell.qa);
   document.getElementById('envbar').innerHTML = '<span class="env-lbl">Ambiente</span>' + ENVS.map(e => {
-    const n = real.map(r => viewOf(r, e.key)).reduce((a, r) => a + (r.reprueba ? r.universo : r.parents + r.subs), 0);
+    const n = real.map(r => viewOf(r, e.key)).reduce((a, r) => a + (r.reprueba ? baseDe(r) : r.parents + r.subs), 0);
     return `<button class="env-btn ${e.key === ENV ? 'active' : ''}" data-env="${e.key}">${e.label}<span class="env-n">${fmt(n)}</span></button>`;
   }).join('');
   document.getElementById('hdrBadge').textContent = 'Ambiente ' + envLabel();
@@ -1137,6 +1139,12 @@ function renderTotalizers() {
   const amb = ENV !== 'ramas';
   const U = real.reduce((a,r) => a + (r.universo || 0), 0);
   const B = real.reduce((a,r) => a + (r.reprueba ? baseDe(r) : 0), 0);
+  // Terminado y Falta en tareas (P) y subtareas (S): Falta + Terminado = total del ambiente
+  const hechoP = real.reduce((a,r) => a + (r.reprueba ? r.donePp : r.buckets.terminado.p), 0);
+  const hechoS = real.reduce((a,r) => a + (r.reprueba ? r.donePs : r.buckets.terminado.s), 0);
+  const totP = amb ? U : P;
+  const totS = amb ? real.reduce((a,r) => a + (r.subsVivas || 0), 0) : S;
+  const faltaP = Math.max(totP - hechoP, 0), faltaS = Math.max(totS - hechoS, 0);
   const reab = real.reduce((a,r) => a + (r.reabiertasAmb || 0), 0);
   const sprints = real.reduce((a,r) => a + r.lists.length, 0);
   const activas = DATA.filter(r => isCell(r) && r.cell.space).length;
@@ -1145,10 +1153,10 @@ function renderTotalizers() {
   const cards = [
     { lbl:'Células', val:CELLS.filter(isCell).length - 1 + ' + QA', sub:`${activas} con backlog · ${pend} sin space` },
     amb
-      ? { lbl:'Tareas a probar en ' + envLabel(), val:fmt(U), sub:`${fmt(reab)} reabiertas a reprobar · ${fmt(real.reduce((a,r) => a + (r.subsVivas || 0), 0))} subtareas (se conocen al reprobar)` }
+      ? { lbl:'Total ' + envLabel(), val:fmt(totP + totS), ps:[['P',totP],['S',totS]], sub:`${fmt(totP)} tareas a probar · ${fmt(totS)} subtareas (se conocen al reprobar) · ${fmt(reab)} reabiertas` }
       : { lbl:'Total ' + envLabel(), val:fmt(P + S), sub:`${fmt(P)} tareas · ${fmt(S)} subtareas`, ps:[['P',P],['S',S]] },
-    { lbl:'Baseline Contable', val:fmt(base.parents + base.subs), sub:`Contable original · ${base.lists.length} sprints · referencia`, ps:[['P',base.parents],['S',base.subs]] },
-    { lbl:'Terminado / cerrado', val:fmt(done), sub: amb ? 'tareas + subtareas resueltas en ' + envLabel() : 'tareas + subtareas terminadas' },
+    { lbl:'Falta (abiertas)', val:fmt(faltaP + faltaS), sub:`tareas + subtareas sin terminar ni cerrar en ${envLabel()}`, ps:[['P',faltaP],['S',faltaS]] },
+    { lbl:'Terminado / cerrado', val:fmt(hechoP + hechoS), sub: amb ? 'tareas + subtareas resueltas en ' + envLabel() : 'tareas + subtareas terminadas', ps:[['P',hechoP],['S',hechoS]] },
     { lbl:'% de avance ' + envLabel(), val:`${(amb ? B : P+S) ? Math.round(done*100/(amb ? B : P+S)) : 0}%`, sub:`${fmt(done)} de ${fmt(amb ? B : P+S)} ${amb ? 'tareas + subtareas' : ''} · ${sprints} sprints` }
   ];
   document.getElementById('totalizers').innerHTML = cards.map(c => `
@@ -1273,13 +1281,14 @@ function renderCelulas() {
 function renderComparativa() {
   const base = baseline();
   const baseT = base.parents + base.subs || 1;
-  const rows = DATA.filter(r => r.cell.space);
+  const conRef = ENV === 'ramas';   // el Contable original sólo vive en la comparativa de RAMAS
+  const rows = DATA.filter(r => r.cell.space && (conRef || !r.cell.ref));
   const max = Math.max(...rows.map(total), 1);
 
   const chart = `
   <div class="chart-card">
     <h2>Volumen de trabajo por módulo</h2>
-    <div class="hint">Barra proporcional al total de tarjetas (tareas + subtareas). El Contable original es la referencia: ${fmt(base.parents)} tareas y ${fmt(base.subs)} subtareas en ${base.lists.length} sprints.</div>
+    <div class="hint">Barra proporcional al total de tarjetas (tareas + subtareas) en ${envLabel()}.${conRef ? ` El Contable original es la referencia: ${fmt(base.parents)} tareas y ${fmt(base.subs)} subtareas en ${base.lists.length} sprints.` : ''}</div>
     ${rows.map(r => {
       const t = total(r);
       const w = t * 100 / max;
@@ -1292,7 +1301,7 @@ function renderComparativa() {
             <div class="hbar-s" style="width:${100-pw}%;background:${r.cell.hex}66;color:var(--text)">${r.subs ? fmt(r.subs) : ''}</div>
           </div>
         </div>
-        <div class="hbar-val"><b>${fmt(t)}</b> · ${Math.round(t*100/baseT)}% del Contable</div>
+        <div class="hbar-val"><b>${fmt(t)}</b>${conRef ? ` · ${Math.round(t*100/baseT)}% del Contable` : ''}</div>
       </div>`;
     }).join('')}
     <div class="bar-legend" style="margin-top:14px">
@@ -1307,7 +1316,7 @@ function renderComparativa() {
     <th class="num">Subt/Tarea</th><th class="num">% vs Contable</th><th class="num">Terminado</th><th class="num">% avance</th>
   </tr>`;
 
-  const body = DATA.map(r => {
+  const body = DATA.filter(r => conRef || !r.cell.ref).map(r => {
     const c = r.cell;
     const t = total(r);
     if (c.qa) {
@@ -1327,7 +1336,7 @@ function renderComparativa() {
       <td class="num">${fmt(r.subs)}</td>
       <td class="num">${fmt(t)}</td>
       <td class="num">${r.parents ? (r.subs/r.parents).toFixed(1) : '—'}</td>
-      <td class="num">${Math.round(t*100/baseT)}%</td>
+      <td class="num">${conRef ? Math.round(t*100/baseT) + '%' : '—'}</td>
       <td class="num">${fmt(doneOf(r))}</td>
       <td class="num">${pctDone(r)}%</td>
     </tr>`;
