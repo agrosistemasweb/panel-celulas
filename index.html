@@ -24,6 +24,16 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif
 .btn.active { background:var(--accent); border-color:var(--accent); color:white; }
 .last-updated { font-size:12px; color:var(--text-muted); }
 
+/* Filtro general por ambiente */
+.envbar { display:flex; gap:8px; padding:14px 24px 0; flex-wrap:wrap; align-items:center; }
+.envbar .env-lbl { font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.5px; margin-right:4px; }
+.env-btn { background:var(--surface2); border:1px solid var(--border); color:var(--text); padding:9px 18px; border-radius:10px; cursor:pointer; font-size:13px; font-weight:700; letter-spacing:.4px; display:flex; align-items:center; gap:8px; transition:all .2s; }
+.env-btn:hover { background:var(--border); }
+.env-btn .env-n { font-size:11px; font-weight:600; color:var(--text-muted); background:var(--bg); border-radius:6px; padding:1px 7px; }
+.env-btn.active { background:var(--accent); border-color:var(--accent); color:white; }
+.env-btn.active .env-n { color:white; background:rgba(0,0,0,.25); }
+@media (max-width:600px) { .envbar { padding:12px 16px 0; } .env-btn { padding:8px 12px; font-size:12px; } }
+
 .tabs { display:flex; gap:4px; padding:12px 24px 0; border-bottom:1px solid var(--border); flex-wrap:wrap; }
 .tab { padding:10px 18px; background:transparent; border:none; color:var(--text-muted); cursor:pointer; font-size:13px; font-weight:500; border-bottom:2px solid transparent; transition:all .2s; }
 .tab:hover { color:var(--text); }
@@ -169,6 +179,8 @@ a.link:hover { text-decoration:underline; }
   </div>
 </div>
 
+<div class="envbar" id="envbar"></div>
+
 <div class="totalizers" id="totalizers"></div>
 
 <div class="tabs">
@@ -221,7 +233,9 @@ const CELLS = [
   // Contable se rehace desde cero (como Cereales): la tarjeta principal lee el space nuevo.
   { n:4, module:'Contable', hex:'#6366f1', space:'1400450000000604', spaceName:'Qa - Modulo Contable',
     url:'https://app.clickup.com/9013241237/v/l/li/1400450000002325',
-    folders:['1400450000001488'], lists:[], members:[82053721, 118014033] },
+    folders:['1400450000001488'], lists:[], members:[82053721, 118014033],
+    // Contable nunca tuvo rama separada: se prueba en devapp, y RAMAS muestra lo mismo.
+    tambienEn:{ ramas:['devapp'] } },
 
   { n:5, module:'Cereales', hex:'#eab308', space:'901313750767', spaceName:'Modulo Cereales App',
     url:'https://app.clickup.com/9013241237/v/o/s/901313750767',
@@ -237,6 +251,29 @@ const CELLS = [
     url:'https://app.clickup.com/9013241237/v/o/s/901312454479',
     folders:['901316203875'], lists:[], members:[82053721, 118014033], baseline:true, ref:true }
 ];
+// Ambientes (filtro general). Cada sprint pertenece al ambiente que dice su nombre
+// ("DEVAPP 07/10", "STAGING 08/10", "PRODUCCION ..."); lo que no dice ninguno son
+// los sprints de las ramas separadas.
+const ENVS = [
+  { key:'ramas',      label:'RAMAS' },
+  { key:'devapp',     label:'DEVAPP' },
+  { key:'staging',    label:'STAGING' },
+  { key:'produccion', label:'PRODUCCIÓN' }
+];
+function envOfList(name) {
+  const n = String(name || '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  if (/^dev\s*app/.test(n)) return 'devapp';
+  if (/^stan?ging|^stage/.test(n)) return 'staging';   // en Fletes la lista se llama "STANGING"
+  if (/^produccion|^prod\b/.test(n)) return 'produccion';
+  return 'ramas';
+}
+let ENV = 'ramas';
+try {
+  const q = new URLSearchParams(location.search).get('env');
+  const g = q || localStorage.getItem('panelCelulas.env');
+  if (ENVS.some(e => e.key === g)) ENV = g;
+} catch (e) {}
+
 // Células reales (sin la referencia de comparación)
 const isCell = r => !(r.cell || r).ref;
 
@@ -618,7 +655,8 @@ function bucketOf(s) { return BUCKET_OF[normStatus(s)] || 'pendiente'; }
 // ============================================================
 // STATE
 // ============================================================
-let DATA = [];          // [{cell, lists:[{id,name,parents,subs,buckets}], parents, subs, buckets, error}]
+let RAW = [];           // lo leído de ClickUp: cada célula con TODAS sus listas (todos los ambientes)
+let DATA = [];          // RAW recortado al ambiente elegido: [{cell, lists, parents, subs, buckets, error}]
 let currentTab = 'celulas';
 let USED_SNAPSHOT = false;   // true si el proxy no respondió y se usó el snapshot embebido
 
@@ -754,8 +792,11 @@ async function loadCell(cell) {
     try {
       const tasks = await tasksOfList(l.id);
       const row = { id:l.id, name:l.name, parents:0, subs:0, buckets:emptyBuckets(),
-                    qa:emptyQa(), byUser:{}, sinAsignar:0 };
+                    qa:emptyQa(), byUser:{}, sinAsignar:0, desde:null };
       for (const t of tasks) {
+        // fecha de comienzo del sprint = la tarea más vieja cargada en él
+        const creada = Number(t.date_created) || 0;
+        if (creada && (!row.desde || creada < row.desde)) row.desde = creada;
         const isSub = !!t.parent;
         const bk = bucketOf(t.status && t.status.status);
         if (isSub) { row.subs++; row.buckets[bk].s++; }
@@ -863,7 +904,7 @@ function saveCache() {
   try {
     localStorage.setItem(CACHE_KEY, JSON.stringify({
       ts: Date.now(),
-      cells: DATA.map(r => ({ module:r.cell.module, lists:r.lists, parents:r.parents,
+      cells: RAW.map(r => ({ module:r.cell.module, lists:r.lists, parents:r.parents,
                               subs:r.subs, buckets:r.buckets, qa:r.qa, byUser:r.byUser,
                               sinAsignar:r.sinAsignar, fromSnapshot:!!r.fromSnapshot }))
     }));
@@ -885,7 +926,8 @@ async function loadAll(opts) {
   if (!background) {
     // placeholders + render incremental: cada célula aparece en cuanto termina,
     // en lugar de esperar a la más lenta (Contable Sprint 8).
-    DATA = CELLS.map(emptyRow);
+    RAW = CELLS.map(emptyRow);
+    DATA = RAW.map(r => viewOf(r));
     document.getElementById('lastUpdated').textContent = 'Cargando datos de ClickUp…';
     render();
   } else {
@@ -896,16 +938,82 @@ async function loadAll(opts) {
   await Promise.all(CELLS.map(async (c, i) => {
     const res = await loadCell(c);
     results[i] = res;
-    if (!background) { DATA[i] = res; render(); }
+    if (!background) { RAW[i] = res; DATA = RAW.map(r => viewOf(r)); render(); }
   }));
 
-  DATA = results;
+  RAW = results;
+  DATA = RAW.map(r => viewOf(r));
   document.getElementById('lastUpdated').textContent = USED_SNAPSHOT
     ? `⚠ Snapshot del ${SNAPSHOT.date} (${motivoCorto()})`
     : 'Actualizado ' + new Date().toLocaleString('es-AR')
       + (DATA.some(r => r.stale) ? ' · ⚠ ClickUp no respondió: hay células con la lectura anterior' : '');
   render();
   if (!USED_SNAPSHOT) saveCache();
+}
+
+// ============================================================
+// AMBIENTE: recorta cada célula a los sprints del ambiente elegido
+// ============================================================
+function listaEnAmbiente(cell, l, env) {
+  const e = envOfList(l.name);
+  return e === env || ((cell.tambienEn || {})[env] || []).includes(e);
+}
+function viewOf(r, env) {
+  env = env || ENV;
+  if (r.cell.ref) return r;   // la referencia (Contable original) no depende del ambiente
+  const lists = r.lists.filter(l => listaEnAmbiente(r.cell, l, env));
+  const v = Object.assign({}, r, { lists, parents:0, subs:0, buckets:emptyBuckets(), qa:emptyQa(),
+                                   byUser:{}, sinAsignar:0 });
+  if (r.stale) v.stale = r.stale.filter(x => lists.some(l => l.name === x.name));
+  for (const l of lists) {
+    v.parents += l.parents; v.subs += l.subs;
+    const b = normBuckets(l.buckets);
+    BUCKETS.forEach(k => { v.buckets[k.key].p += b[k.key].p; v.buckets[k.key].s += b[k.key].s; });
+    const q = Object.assign(emptyQa(), l.qa);
+    for (const k in v.qa) v.qa[k] += q[k];
+    v.sinAsignar += l.sinAsignar || 0;
+    for (const uid in (l.byUser || {})) v.byUser[uid] = (v.byUser[uid] || 0) + l.byUser[uid];
+  }
+  return v;
+}
+// Fecha de comienzo de un sprint de ambiente: la que dice su nombre ("DEVAPP 07/10"),
+// porque las tareas se mueven desde sprints anteriores y conservan su fecha de creación.
+// Sólo cuenta si el sprint ya tiene tareas cargadas. Las listas de RAMAS no se parsean
+// ("Sprint 1 (8/10-8/23)" es mes/día): ahí vale la tarea más vieja.
+function fechaDelNombre(name) {
+  const m = String(name || '').match(/(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?/);
+  if (!m) return null;
+  const hoy = new Date();
+  let y = m[3] ? Number(m[3].length === 2 ? '20' + m[3] : m[3]) : hoy.getFullYear();
+  let d = new Date(y, Number(m[2]) - 1, Number(m[1]));
+  if (!m[3] && d - hoy > 60 * 864e5) d = new Date(y - 1, Number(m[2]) - 1, Number(m[1]));
+  return isNaN(d) ? null : d.getTime();
+}
+function comienzoLista(l) {
+  if (!(l.parents + l.subs)) return null;
+  // En un ambiente la fecha la da el nombre del sprint: sin fecha en el nombre no se
+  // inventa una (Cereales "STAGING" tiene tareas de abril que todavía no se entregaron).
+  if (envOfList(l.name) !== 'ramas') {
+    const porNombre = fechaDelNombre(l.name);
+    return porNombre ? Math.max(porNombre, l.desde || 0) : null;
+  }
+  return l.desde || null;
+}
+function comienzoDe(r) {
+  const fs = (r.lists || []).map(comienzoLista).filter(Boolean);
+  return fs.length ? Math.min(...fs) : null;
+}
+const fmtFecha = ms => new Date(ms).toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric' });
+
+function envLabel(k) { return (ENVS.find(e => e.key === (k || ENV)) || ENVS[0]).label; }
+
+function renderEnvbar() {
+  const real = RAW.filter(r => isCell(r) && r.cell.space && !r.cell.qa);
+  document.getElementById('envbar').innerHTML = '<span class="env-lbl">Ambiente</span>' + ENVS.map(e => {
+    const n = real.map(r => viewOf(r, e.key)).reduce((a, r) => a + r.parents + r.subs, 0);
+    return `<button class="env-btn ${e.key === ENV ? 'active' : ''}" data-env="${e.key}">${e.label}<span class="env-n">${fmt(n)}</span></button>`;
+  }).join('');
+  document.getElementById('hdrBadge').textContent = 'Ambiente ' + envLabel();
 }
 
 // ============================================================
@@ -987,10 +1095,10 @@ function renderTotalizers() {
 
   const cards = [
     { lbl:'Células', val:CELLS.filter(isCell).length - 1 + ' + QA', sub:`${activas} con backlog · ${pend} sin space` },
-    { lbl:'Total del programa', val:fmt(P + S), sub:`${fmt(P)} tareas · ${fmt(S)} subtareas`, ps:[['P',P],['S',S]] },
+    { lbl:'Total ' + envLabel(), val:fmt(P + S), sub:`${fmt(P)} tareas · ${fmt(S)} subtareas`, ps:[['P',P],['S',S]] },
     { lbl:'Baseline Contable', val:fmt(base.parents + base.subs), sub:`Contable original · ${base.lists.length} sprints · referencia`, ps:[['P',base.parents],['S',base.subs]] },
     { lbl:'Terminado / cerrado', val:fmt(done), sub:'tareas + subtareas terminadas' },
-    { lbl:'% de avance', val:`${P+S ? Math.round(done*100/(P+S)) : 0}%`, sub:`${fmt(done)} de ${fmt(P+S)} · ${sprints} sprints` }
+    { lbl:'% de avance ' + envLabel(), val:`${P+S ? Math.round(done*100/(P+S)) : 0}%`, sub:`${fmt(done)} de ${fmt(P+S)} · ${sprints} sprints` }
   ];
   document.getElementById('totalizers').innerHTML = cards.map(c => `
     <div class="tot-card">
@@ -1036,6 +1144,7 @@ function cellCard(r) {
 
   let note = '';
   if (c.qa) note = `<div class="note">Célula transversal: valida <b>todos</b> los módulos. QA trabaja únicamente en <b>Listo para QA</b> y <b>En QA</b>, y sólo suma lo que está <b>asignado a Lorena o a Laura Mignanelli</b>: si la tarjeta no está a nombre de ellas, no cuenta. Pendiente, en curso, bloqueado, en revisión y reabierta son estados de los devs.</div>`;
+  else if (has && !c.ref && !r.lists.length && !r.error) note = `<div class="note">Todavía no hay sprint de <b>${envLabel()}</b> para ${c.module}. Apenas se cree en ClickUp una lista que empiece con <b>${envLabel()}</b> dentro del space del módulo, el panel la levanta sola.</div>`;
   else if (!has) note = `<div class="note">Sin space en ClickUp todavía. Apenas se cree el space del módulo <b>${c.module}</b>, agregar su id en <code>CELLS</code> y el panel lo levanta solo.</div>`;
 
   let qaLoad = '';
@@ -1061,7 +1170,7 @@ function cellCard(r) {
     <div class="cell-header">
       <div class="cell-num" style="background:${c.hex}">${c.n}</div>
       <div class="cell-title">
-        <div class="mod">${c.module}${c.baseline?' <span class="tag" style="background:rgba(99,102,241,.2);color:#a5b4fc">baseline</span>':''}</div>
+        <div class="mod">${c.module}${(!c.ref && !c.qa && comienzoDe(r)) ? ` <span class="tag" style="background:var(--surface2);color:var(--text-muted)" title="Comienzo de las pruebas en ${envLabel()}">${envLabel()} · ${fmtFecha(comienzoDe(r))}</span>` : ''}${c.baseline?' <span class="tag" style="background:rgba(99,102,241,.2);color:#a5b4fc">baseline</span>':''}</div>
         <div class="sub">${c.url ? `<a class="link" href="${c.url}" target="_blank">${c.spaceName}</a>` : c.spaceName}</div>
       </div>
     </div>
@@ -1371,6 +1480,7 @@ function motivoCorto() {
 }
 
 function render() {
+  renderEnvbar();
   renderTotalizers();
   const el = document.getElementById('content');
   const banner = USED_SNAPSHOT
@@ -1401,7 +1511,7 @@ function exportCsv() {
   const blob = new Blob(['﻿' + lines.join('\n')], { type:'text/csv;charset=utf-8;' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'panel-celulas-' + new Date().toISOString().slice(0,10) + '.csv';
+  a.download = 'panel-celulas-' + ENV + '-' + new Date().toISOString().slice(0,10) + '.csv';
   a.click();
 }
 
@@ -1426,12 +1536,21 @@ document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', async
 // lectura inicial en segundo plano: pinta el semaforo del tab y habilita los avisos
 srvCargar().then(() => { srvPintarDot(); if (currentTab === 'servidores') render(); });
 setInterval(() => { if (currentTab !== 'servidores') srvCargar(); }, 300000);
+document.getElementById('envbar').addEventListener('click', ev => {
+  const b = ev.target.closest('.env-btn');
+  if (!b || b.dataset.env === ENV) return;
+  ENV = b.dataset.env;
+  try { localStorage.setItem('panelCelulas.env', ENV); } catch (e) {}
+  try { const u = new URL(location.href); u.searchParams.set('env', ENV); history.replaceState(null, '', u); } catch (e) {}
+  DATA = RAW.map(r => viewOf(r));
+  render();
+});
 document.getElementById('refreshBtn').addEventListener('click', () => loadAll());
 document.getElementById('exportCsvBtn').addEventListener('click', exportCsv);
 
 const cached = readCache();
 if (cached) {
-  DATA = CELLS.map(c => {
+  RAW = CELLS.map(c => {
     const row = cached.cells.find(x => x.module === c.module);
     if (!row) return emptyRow(c);
     (row.lists || []).forEach(l => { l.buckets = normBuckets(l.buckets); l.qa = l.qa || emptyQa(); });
@@ -1440,6 +1559,7 @@ if (cached) {
              byUser:row.byUser || {}, sinAsignar:row.sinAsignar || 0,
              error:null, fromSnapshot:row.fromSnapshot };
   });
+  DATA = RAW.map(r => viewOf(r));
   document.getElementById('lastUpdated').textContent =
     'Caché ' + new Date(cached.ts).toLocaleString('es-AR');
   render();
