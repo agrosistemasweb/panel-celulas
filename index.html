@@ -792,7 +792,10 @@ async function loadCell(cell) {
     try {
       const tasks = await tasksOfList(l.id);
       const row = { id:l.id, name:l.name, parents:0, subs:0, buckets:emptyBuckets(),
-                    qa:emptyQa(), byUser:{}, sinAsignar:0, desde:null };
+                    qa:emptyQa(), byUser:{}, sinAsignar:0, desde:null, viejo:{ p:0, s:0 } };
+      // Sprint de ambiente: lo que ya estaba cerrado antes de su inicio vino así de la
+      // rama y no es avance de este ambiente.
+      const inicioAmb = envOfList(l.name) !== 'ramas' ? fechaDelNombre(l.name) : null;
       for (const t of tasks) {
         // fecha de comienzo del sprint = la tarea más vieja cargada en él
         const creada = Number(t.date_created) || 0;
@@ -801,6 +804,10 @@ async function loadCell(cell) {
         const bk = bucketOf(t.status && t.status.status);
         if (isSub) { row.subs++; row.buckets[bk].s++; }
         else       { row.parents++; row.buckets[bk].p++; }
+        if (inicioAmb && bk === 'terminado') {
+          const cerrada = Number(t.date_done || t.date_closed) || 0;
+          if (cerrada && cerrada < inicioAmb) row.viejo[isSub ? 's' : 'p']++;
+        }
 
         // Cada tarjeta suma al dev que la tiene asignada
         const asig = t.assignees || [];
@@ -965,8 +972,27 @@ function viewOf(r, env) {
   const v = Object.assign({}, r, { lists, parents:0, subs:0, buckets:emptyBuckets(), qa:emptyQa(),
                                    byUser:{}, sinAsignar:0 });
   if (r.stale) v.stale = r.stale.filter(x => lists.some(l => l.name === x.name));
+  // En DEVAPP / STAGING / PRODUCCIÓN se reprueba todo desde cero: sólo se conocen las
+  // tareas (puntos a probar) y las subtareas aparecen al reprobar. Universo = todas las
+  // tareas padre del módulo (rama + ambientes: se mueven, no se copian). Avanza sólo lo
+  // terminado DENTRO del sprint de este ambiente; lo cerrado en la rama no cuenta.
+  // El módulo entra al ambiente cuando tiene un sprint de ese ambiente (Cereales no
+  // tiene DEVAPP: lo entregan directo en STAGING).
+  if (env !== 'ramas' && !r.cell.qa) {
+    const tiene = lists.length > 0;
+    v.reprueba = true;
+    v.universo = tiene ? r.lists.reduce((a, l) => a + (l.parents || 0), 0) : 0;
+    v.doneP = 0; v.reabiertasAmb = 0; v.subsVivas = 0;
+  }
   for (const l of lists) {
     v.parents += l.parents; v.subs += l.subs;
+    if (v.reprueba) {
+      const lb = normBuckets(l.buckets);
+      const vj = l.viejo || { p:0, s:0 };
+      v.doneP += lb.terminado.p + lb.terminado.s - vj.p - vj.s;   // probado y resuelto en este ambiente
+      v.subsVivas += l.subs - vj.s;                              // subtareas que aparecieron / se reprueban acá
+      v.reabiertasAmb += lb.reabierta.p + lb.reabierta.s;
+    }
     const b = normBuckets(l.buckets);
     BUCKETS.forEach(k => { v.buckets[k.key].p += b[k.key].p; v.buckets[k.key].s += b[k.key].s; });
     const q = Object.assign(emptyQa(), l.qa);
@@ -1010,7 +1036,7 @@ function envLabel(k) { return (ENVS.find(e => e.key === (k || ENV)) || ENVS[0]).
 function renderEnvbar() {
   const real = RAW.filter(r => isCell(r) && r.cell.space && !r.cell.qa);
   document.getElementById('envbar').innerHTML = '<span class="env-lbl">Ambiente</span>' + ENVS.map(e => {
-    const n = real.map(r => viewOf(r, e.key)).reduce((a, r) => a + r.parents + r.subs, 0);
+    const n = real.map(r => viewOf(r, e.key)).reduce((a, r) => a + (r.reprueba ? r.universo : r.parents + r.subs), 0);
     return `<button class="env-btn ${e.key === ENV ? 'active' : ''}" data-env="${e.key}">${e.label}<span class="env-n">${fmt(n)}</span></button>`;
   }).join('');
   document.getElementById('hdrBadge').textContent = 'Ambiente ' + envLabel();
@@ -1040,8 +1066,9 @@ function qaStats() {
   out.porLista.sort((a,b) => (b.cola - a.cola) || (b.porCaer - a.porCaer));
   return out;
 }
-function doneOf(r) { return r.buckets.terminado.p + r.buckets.terminado.s; }
-function pctDone(r) { const t = total(r); return t ? Math.round(doneOf(r) * 100 / t) : 0; }
+function doneOf(r) { return r.reprueba ? r.doneP : r.buckets.terminado.p + r.buckets.terminado.s; }
+function baseDe(r) { return r.reprueba ? r.universo + r.subsVivas : total(r); }
+function pctDone(r) { const t = baseDe(r); return t ? Math.round(doneOf(r) * 100 / t) : 0; }
 
 // byUser opcional: agrega a cada chip cuántas tarjetas tiene asignadas esa persona
 function memberChips(ids, byUser) {
@@ -1064,6 +1091,17 @@ function otherAssigneeChips(r) {
   }).join('');
   const sin = r.sinAsignar ? `<span class="member"><span class="av" style="background:#475569">—</span>sin asignar <b style="color:var(--text)">${fmt(r.sinAsignar)}</b></span>` : '';
   return `<div class="members" style="margin-top:6px;opacity:.8">${chips}${sin}</div>`;
+}
+
+function repruebaBar(r) {
+  const U = baseDe(r);
+  if (!U) return '<div class="bar"></div>';
+  const enAmb = r.lists.reduce((a, l) => a + l.parents, 0) + r.subsVivas;
+  const viejo = r.lists.reduce((a, l) => a + ((l.viejo || {}).p || 0) + ((l.viejo || {}).s || 0), 0);
+  const segs = BUCKETS.map(b => ({ b, v:r.buckets[b.key].p + r.buckets[b.key].s - (b.key === 'terminado' ? viejo : 0) }))
+    .concat([{ b:{ label:'Todavía en la rama (sin reprobar)', color:'#475569' }, v:Math.max(U - enAmb, 0) }]);
+  return `<div class="bar">${segs.map(x => x.v ? `<div class="bar-seg" style="width:${x.v*100/U}%;background:${x.b.color}" title="${x.b.label}: ${x.v}"></div>` : '').join('')}</div>
+    <div class="bar-legend">${segs.map(x => x.v ? `<span class="lg"><span class="dot" style="background:${x.b.color}"></span>${x.b.label} <b>${fmt(x.v)}</b></span>` : '').join('')}</div>`;
 }
 
 function bucketBar(r) {
@@ -1089,16 +1127,22 @@ function renderTotalizers() {
   const P = real.reduce((a,r) => a + r.parents, 0);
   const S = real.reduce((a,r) => a + r.subs, 0);
   const done = real.reduce((a,r) => a + doneOf(r), 0);
+  const amb = ENV !== 'ramas';
+  const U = real.reduce((a,r) => a + (r.universo || 0), 0);
+  const B = real.reduce((a,r) => a + (r.reprueba ? baseDe(r) : 0), 0);
+  const reab = real.reduce((a,r) => a + (r.reabiertasAmb || 0), 0);
   const sprints = real.reduce((a,r) => a + r.lists.length, 0);
   const activas = DATA.filter(r => isCell(r) && r.cell.space).length;
   const pend = CELLS.filter(c => isCell(c) && !c.space && !c.qa).length;
 
   const cards = [
     { lbl:'Células', val:CELLS.filter(isCell).length - 1 + ' + QA', sub:`${activas} con backlog · ${pend} sin space` },
-    { lbl:'Total ' + envLabel(), val:fmt(P + S), sub:`${fmt(P)} tareas · ${fmt(S)} subtareas`, ps:[['P',P],['S',S]] },
+    amb
+      ? { lbl:'Tareas a probar en ' + envLabel(), val:fmt(U), sub:`${fmt(reab)} reabiertas a reprobar · ${fmt(real.reduce((a,r) => a + (r.subsVivas || 0), 0))} subtareas (se conocen al reprobar)` }
+      : { lbl:'Total ' + envLabel(), val:fmt(P + S), sub:`${fmt(P)} tareas · ${fmt(S)} subtareas`, ps:[['P',P],['S',S]] },
     { lbl:'Baseline Contable', val:fmt(base.parents + base.subs), sub:`Contable original · ${base.lists.length} sprints · referencia`, ps:[['P',base.parents],['S',base.subs]] },
-    { lbl:'Terminado / cerrado', val:fmt(done), sub:'tareas + subtareas terminadas' },
-    { lbl:'% de avance ' + envLabel(), val:`${P+S ? Math.round(done*100/(P+S)) : 0}%`, sub:`${fmt(done)} de ${fmt(P+S)} · ${sprints} sprints` }
+    { lbl:'Terminado / cerrado', val:fmt(done), sub: amb ? 'tareas + subtareas resueltas en ' + envLabel() : 'tareas + subtareas terminadas' },
+    { lbl:'% de avance ' + envLabel(), val:`${(amb ? B : P+S) ? Math.round(done*100/(amb ? B : P+S)) : 0}%`, sub:`${fmt(done)} de ${fmt(amb ? B : P+S)} ${amb ? 'tareas + subtareas' : ''} · ${sprints} sprints` }
   ];
   document.getElementById('totalizers').innerHTML = cards.map(c => `
     <div class="tot-card">
@@ -1144,6 +1188,7 @@ function cellCard(r) {
 
   let note = '';
   if (c.qa) note = `<div class="note">Célula transversal: valida <b>todos</b> los módulos. QA trabaja únicamente en <b>Listo para QA</b> y <b>En QA</b>, y sólo suma lo que está <b>asignado a Lorena o a Laura Mignanelli</b>: si la tarjeta no está a nombre de ellas, no cuenta. Pendiente, en curso, bloqueado, en revisión y reabierta son estados de los devs.</div>`;
+  else if (has && !c.ref && !r.lists.length && !r.error && r.reprueba) note = `<div class="note">${c.module} no tiene sprint de <b>${envLabel()}</b>. Apenas se cree en ClickUp una lista que empiece con <b>${envLabel()}</b> en el space del módulo, entra con todas sus tareas a probar.</div>`;
   else if (has && !c.ref && !r.lists.length && !r.error) note = `<div class="note">Todavía no hay sprint de <b>${envLabel()}</b> para ${c.module}. Apenas se cree en ClickUp una lista que empiece con <b>${envLabel()}</b> dentro del space del módulo, el panel la levanta sola.</div>`;
   else if (!has) note = `<div class="note">Sin space en ClickUp todavía. Apenas se cree el space del módulo <b>${c.module}</b>, agregar su id en <code>CELLS</code> y el panel lo levanta solo.</div>`;
 
@@ -1177,7 +1222,14 @@ function cellCard(r) {
     <div class="cell-body">
       <div class="members">${memberChips(c.members, has ? r.byUser : null)}</div>
       ${c.qa || !has ? '' : otherAssigneeChips(r)}
-      ${c.qa ? qaLoad : `
+      ${c.qa ? qaLoad : r.reprueba ? `
+      <div class="nums">
+        <div class="num-box"><div class="n">${fmt(r.universo)}</div><div class="l">Tareas a probar</div></div>
+        <div class="num-box"><div class="n">${fmt(r.reabiertasAmb)}</div><div class="l">Reabiertas a reprobar</div></div>
+        <div class="num-box"><div class="n">${pctDone(r)}%</div><div class="l">Avance</div></div>
+      </div>
+      ${r.universo ? `<div><div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">Avance — ${fmt(r.doneP)} de ${fmt(baseDe(r))} resueltas en ${envLabel()} (${fmt(r.universo)} tareas + ${fmt(r.subsVivas)} subtareas, se conocen al reprobar)</div>${repruebaBar(r)}</div>` : ''}
+      ${sprints}` : `
       <div class="nums">
         <div class="num-box"><div class="n">${fmt(r.parents)}</div><div class="l">Tareas</div></div>
         <div class="num-box"><div class="n">${fmt(r.subs)}</div><div class="l">Subtareas</div></div>
