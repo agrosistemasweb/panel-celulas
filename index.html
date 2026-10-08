@@ -267,6 +267,11 @@ function envOfList(name) {
   if (/^produccion|^prod\b/.test(n)) return 'produccion';
   return 'ramas';
 }
+// RAMAS quedó CONGELADO al 08/10/2026: desde ahí se prueba sólo en los ambientes y lo
+// pendiente de cada rama se mueve al sprint del ambiente (no se recuenta, no se duplica).
+// Fletes y Sueldos ya habían movido lo pendiente a DEVAPP: la foto lo devuelve a su rama.
+const RAMAS_CONGELADO = { fecha:'08/10/2026', modulos:{"Insumos":[{"id":"901327585431","name":"Sprint 1 Qa Pruebas","parents":0,"subs":0,"buckets":{"pendiente":{"p":0,"s":0},"reabierta":{"p":0,"s":0},"curso":{"p":0,"s":0},"revision":{"p":0,"s":0},"qa":{"p":0,"s":0},"terminado":{"p":0,"s":0}},"qa":{"cola":0,"porCaer":0,"validado":0,"reabiertas":0},"byUser":{},"sinAsignar":0},{"id":"901328136962","name":"Sprint 2 Corrección Bugs Qa","parents":54,"subs":373,"buckets":{"pendiente":{"p":0,"s":0},"reabierta":{"p":0,"s":0},"curso":{"p":0,"s":0},"revision":{"p":0,"s":0},"qa":{"p":0,"s":0},"terminado":{"p":54,"s":373}},"qa":{"cola":0,"porCaer":0,"validado":2,"reabiertas":0},"byUser":{"174607180":2},"sinAsignar":425,"desde":1781578800000}],"Fletes":[{"id":"901328139800","name":"Sprint 1 (8/10-8/23)","parents":22,"subs":43,"buckets":{"pendiente":{"p":1,"s":1},"reabierta":{"p":0,"s":1},"curso":{"p":0,"s":0},"revision":{"p":1,"s":0},"qa":{"p":0,"s":0},"terminado":{"p":20,"s":41}},"qa":{"cola":0,"porCaer":0,"validado":1,"reabiertas":0},"byUser":{"174607180":3,"82082258":1,"120292638":2},"sinAsignar":60,"desde":1786330800000}],"Sueldos":[{"id":"901328139852","name":"Sprint 1 (8/10-8/23)","parents":17,"subs":35,"buckets":{"pendiente":{"p":3,"s":2},"reabierta":{"p":0,"s":0},"curso":{"p":0,"s":0},"revision":{"p":0,"s":0},"qa":{"p":0,"s":0},"terminado":{"p":14,"s":33}},"qa":{"cola":0,"porCaer":0,"validado":0,"reabiertas":0},"byUser":{"82082180":3,"90708484":5,"118075668":3},"sinAsignar":44,"desde":1786330800000}],"Contable":[{"id":"1400450000002325","name":"DEVAPP -07/10","parents":130,"subs":15,"buckets":{"pendiente":{"p":129,"s":15},"reabierta":{"p":0,"s":0},"curso":{"p":0,"s":0},"revision":{"p":0,"s":0},"qa":{"p":1,"s":0},"terminado":{"p":0,"s":0}},"qa":{"cola":1,"porCaer":0,"validado":0,"reabiertas":0},"byUser":{"118075668":16},"sinAsignar":129}],"Cereales":[]} };
+
 let ENV = 'ramas';
 try {
   const q = new URLSearchParams(location.search).get('env');
@@ -968,7 +973,9 @@ function listaEnAmbiente(cell, l, env) {
 function viewOf(r, env) {
   env = env || ENV;
   if (r.cell.ref) return r;   // la referencia (Contable original) no depende del ambiente
-  const lists = r.lists.filter(l => listaEnAmbiente(r.cell, l, env));
+  const foto = env === 'ramas' ? RAMAS_CONGELADO.modulos[r.cell.module] : null;
+  const lists = foto ? JSON.parse(JSON.stringify(foto))
+                     : env === 'ramas' ? [] : r.lists.filter(l => listaEnAmbiente(r.cell, l, env));
   const v = Object.assign({}, r, { lists, parents:0, subs:0, buckets:emptyBuckets(), qa:emptyQa(),
                                    byUser:{}, sinAsignar:0 });
   if (r.stale) v.stale = r.stale.filter(x => lists.some(l => l.name === x.name));
@@ -1535,9 +1542,11 @@ function render() {
   renderEnvbar();
   renderTotalizers();
   const el = document.getElementById('content');
-  const banner = USED_SNAPSHOT
+  const banner = (USED_SNAPSHOT
     ? `<div class="err">${causaFallo()} Se muestran los números del <b>snapshot del ${SNAPSHOT.date}</b>.</div>`
-    : '';
+    : '') + (ENV === 'ramas' && currentTab !== 'servidores'
+    ? `<div class="note" style="margin-bottom:14px">🔒 <b>RAMAS congelado al ${RAMAS_CONGELADO.fecha}</b>: es la foto final de las pruebas en ramas separadas y ya no se actualiza. Lo pendiente se movió a los sprints de los ambientes, donde se sigue contando (DEVAPP, STAGING, PRODUCCIÓN).</div>`
+    : '');
   if (currentTab === 'celulas')     el.innerHTML = banner + renderCelulas();
   else if (currentTab === 'comparativa') el.innerHTML = banner + renderComparativa();
   else if (currentTab === 'servidores')  el.innerHTML = renderServidores();
