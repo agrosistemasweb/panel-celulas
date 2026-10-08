@@ -1239,13 +1239,13 @@ function cellCard(r) {
       <div class="members">${memberChips(c.members, has && !r.cargando ? r.byUser : null)}</div>
       ${c.qa || !has ? '' : otherAssigneeChips(r)}
       ${r.cargando && has && !c.qa ? '' : c.qa ? qaLoad : r.reprueba ? `
-      <div class="nums">
-        <div class="num-box"><div class="n">${fmt(r.universo)}</div><div class="l">Tareas a probar</div></div>
-        <div class="num-box"><div class="n">${fmt(r.reabiertasAmb)}</div><div class="l">Reabiertas a reprobar</div></div>
+      <div class="nums" style="grid-template-columns:repeat(4,1fr)">
+        <div class="num-box"><div class="n">${fmt(r.universo)}</div><div class="l">Tareas</div></div>
+        <div class="num-box"><div class="n">${fmt(r.subsVivas)}</div><div class="l">Subtareas</div></div>
+        <div class="num-box"><div class="n">${fmt(r.reabiertasAmb)}</div><div class="l">Reabiertas</div></div>
         <div class="num-box"><div class="n">${pctDone(r)}%</div><div class="l">Avance</div></div>
       </div>
-      ${r.universo ? `<div><div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">Avance — ${fmt(r.doneP)} de ${fmt(baseDe(r))} resueltas en ${envLabel()} (${fmt(r.universo)} tareas + ${fmt(r.subsVivas)} subtareas, se conocen al reprobar)</div>${repruebaBar(r)}</div>` : ''}
-      ${sprints}` : `
+      ${r.universo ? `<div><div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">Avance — ${fmt(r.doneP)} de ${fmt(baseDe(r))} resueltas en ${envLabel()} (${fmt(r.universo)} tareas + ${fmt(r.subsVivas)} subtareas, se conocen al reprobar)</div>${repruebaBar(r)}</div>` : ''}` : `
       <div class="nums">
         <div class="num-box"><div class="n">${fmt(r.parents)}</div><div class="l">Tareas</div></div>
         <div class="num-box"><div class="n">${fmt(r.subs)}</div><div class="l">Subtareas</div></div>
