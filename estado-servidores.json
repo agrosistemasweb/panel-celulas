@@ -1,5 +1,5 @@
 {
-  "actualizado": "2026-10-10T22:08:17.046Z",
+  "actualizado": "2026-10-10T22:23:30.845Z",
   "ambientes": {
     "produccion": {
       "nombre": "Producción",
@@ -7,10 +7,10 @@
       "estado": "ok",
       "detalle": "responde en 1.5 s",
       "httpStatus": 200,
-      "ms": 1463,
+      "ms": 1512,
       "huella": "730b9905c353",
       "desde": "2026-10-06T16:33:16.178Z",
-      "ultimoChequeo": "2026-10-10T22:08:17.046Z",
+      "ultimoChequeo": "2026-10-10T22:23:30.845Z",
       "ultimoDeploy": null,
       "fallosSeguidos": 0,
       "intentos": 1
@@ -19,12 +19,12 @@
       "nombre": "Stage",
       "url": "https://stage.agrosistemas.com.ar",
       "estado": "ok",
-      "detalle": "responde en 0.8 s",
+      "detalle": "responde en 0.7 s",
       "httpStatus": 200,
-      "ms": 767,
+      "ms": 731,
       "huella": "a801507c678b",
       "desde": "2026-10-06T16:33:16.178Z",
-      "ultimoChequeo": "2026-10-10T22:08:17.046Z",
+      "ultimoChequeo": "2026-10-10T22:23:30.845Z",
       "ultimoDeploy": "2026-09-02T18:25:05.259Z",
       "fallosSeguidos": 0,
       "intentos": 1
@@ -33,12 +33,12 @@
       "nombre": "Devapp",
       "url": "https://devapp.agrosistemas.com.ar",
       "estado": "ok",
-      "detalle": "responde en 0.4 s",
+      "detalle": "responde en 0.8 s",
       "httpStatus": 200,
-      "ms": 422,
+      "ms": 802,
       "huella": "b86cac4f06db",
       "desde": "2026-10-09T11:13:45.254Z",
-      "ultimoChequeo": "2026-10-10T22:08:17.046Z",
+      "ultimoChequeo": "2026-10-10T22:23:30.845Z",
       "ultimoDeploy": "2026-10-09T11:13:45.254Z",
       "fallosSeguidos": 0,
       "intentos": 1
