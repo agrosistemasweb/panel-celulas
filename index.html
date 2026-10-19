@@ -1507,7 +1507,7 @@ function renderServidores() {
     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px">
       <h2 class="section-title" style="margin:0">Estado de los ambientes</h2>
       <div style="display:flex;align-items:center;gap:10px">
-        <span class="last-updated">Sondeo automático cada 5 min · última lectura ${srvHace(SRV.actualizado)}</span>
+        <span class="last-updated">Sondeo automático cada 15 min · última lectura ${srvHace(SRV.actualizado)}</span>
         <button class="srv-alert-btn ${SRV_AVISOS ? 'on' : ''}" onclick="srvToggleAvisos()">
           ${SRV_AVISOS ? '🔔 Avisos activados' : '🔕 Avisarme en este navegador'}
         </button>

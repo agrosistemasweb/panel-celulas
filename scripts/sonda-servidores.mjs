@@ -37,6 +37,9 @@ const RUTA_JSON = opt('--json', 'estado-servidores.json');
 const TIMEOUT = Number(opt('--timeout', '20000'));
 const LENTO_MS = Number(opt('--lento', '6000'));
 const MAX_HISTORIAL = 300;
+// Sin cambios de estado, el JSON se reescribe recien cuando pasa este tiempo:
+// cada commit dispara un build de Pages, y eso duplicaba el gasto de Actions.
+const LATIDO_MS = Number(opt('--latido', String(60 * 60 * 1000)));
 
 /** Huella del build: hashes de los assets de Next que aparecen en el HTML. */
 function huellaDeBuild(html) {
@@ -141,6 +144,7 @@ const anterior = existsSync(RUTA_JSON)
 const ahoraISO = new Date().toISOString();
 const salida = { actualizado: ahoraISO, ambientes: {}, historial: anterior.historial || [] };
 const alertas = [];
+let hayQueGuardar = !anterior.actualizado || Date.now() - Date.parse(anterior.actualizado) >= LATIDO_MS;
 
 for (const amb of AMBIENTES) {
   const previo = anterior.ambientes?.[amb.id];
@@ -174,6 +178,8 @@ for (const amb of AMBIENTES) {
     intentos: r.intentos || 1,
   };
 
+  if (cambio || fallosSeguidos !== (previo?.fallosSeguidos || 0)) hayQueGuardar = true;
+
   if (cambio) {
     const texto = mensajeTransicion(amb, previo?.estado, estado, detalle, deployTermino);
     salida.historial.unshift({
@@ -191,8 +197,12 @@ for (const amb of AMBIENTES) {
 }
 
 salida.historial = salida.historial.slice(0, MAX_HISTORIAL);
-writeFileSync(RUTA_JSON, JSON.stringify(salida, null, 2) + '\n');
-console.log(`\nJSON escrito en ${RUTA_JSON} (${salida.historial.length} eventos en el historial)`);
+if (hayQueGuardar) {
+  writeFileSync(RUTA_JSON, JSON.stringify(salida, null, 2) + '\n');
+  console.log(`\nJSON escrito en ${RUTA_JSON} (${salida.historial.length} eventos en el historial)`);
+} else {
+  console.log('\nsin cambios de estado y latido vigente: no se reescribe el JSON');
+}
 
 for (const a of alertas) console.log(`ALERTA|${a}`);
 if (!alertas.length) console.log('sin transiciones: no hay nada que avisar');
