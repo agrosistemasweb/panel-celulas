@@ -98,6 +98,26 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif
 
 .note { font-size:11px; color:var(--text-muted); background:var(--bg); border:1px dashed var(--border); border-radius:8px; padding:8px 10px; line-height:1.5; }
 
+/* STAGING: avance por DOMINIO (campo de ClickUp) con semáforo por estado */
+.doms { display:flex; flex-direction:column; gap:6px; }
+.dom { background:var(--bg); border:1px solid var(--border); border-radius:9px; }
+.dom > summary { list-style:none; cursor:pointer; padding:8px 10px; display:flex; flex-direction:column; gap:6px; }
+.dom > summary::-webkit-details-marker { display:none; }
+.dom-head { display:flex; align-items:center; gap:8px; font-size:12.5px; font-weight:600; }
+.dom-head .chev { color:var(--text-muted); font-size:10px; transition:transform .2s; }
+.dom[open] .dom-head .chev { transform:rotate(90deg); }
+.dom-head .dom-name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dom-head .dom-n { font-size:11px; font-weight:500; color:var(--text-muted); }
+.dom-head .dom-pct { font-size:15px; font-weight:800; min-width:44px; text-align:right; }
+.dom .bar { height:8px; }
+.dom-tasks { padding:0 10px 10px; display:flex; flex-direction:column; gap:3px; max-height:320px; overflow:auto; }
+.dom-task { display:flex; align-items:center; gap:7px; font-size:11.5px; padding:4px 6px; border-radius:5px; background:var(--surface); }
+.dom-task .dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+.dom-task a { color:var(--text); text-decoration:none; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dom-task a:hover { color:var(--accent-hover); }
+.dom-task .st { font-size:10px; color:var(--text-muted); text-transform:uppercase; white-space:nowrap; }
+.dom-task .ns { font-size:10px; color:var(--text-muted); white-space:nowrap; }
+
 /* Tabla comparativa */
 .table-wrap { background:var(--surface); border:1px solid var(--border); border-radius:14px; overflow:auto; }
 table { width:100%; border-collapse:collapse; font-size:13px; min-width:900px; }
@@ -652,6 +672,25 @@ BUCKETS.forEach(b => b.statuses.forEach(s => BUCKET_OF[s] = b.key));
 function normStatus(s) { return String(s||'').toLowerCase().replace(/\s+/g,' ').trim(); }
 function bucketOf(s) { return BUCKET_OF[normStatus(s)] || 'pendiente'; }
 
+// STAGING agrupa cada módulo por el campo DOMINIO de ClickUp (lo carga el equipo en
+// cada tarea). Las subtareas toman el dominio de su tarea padre.
+const DOM_FIELD = '4515e73a-a381-4046-8c9c-4f75c54b1179';
+const DOM_ORDEN = ['Listas', 'Registracion', 'Informes', 'Generales'];
+const DOM_LABEL = { Registracion:'Registración' };
+const SIN_DOM = 'Sin dominio';
+function domOf(t) {
+  const f = (t.custom_fields || []).find(x => x.id === DOM_FIELD);
+  if (!f || f.value === null || f.value === undefined || f.value === '') return null;
+  const opts = (f.type_config && f.type_config.options) || [];
+  const o = opts.find(x => x.id === f.value || String(x.orderindex) === String(f.value));
+  return o ? o.name : null;
+}
+// Semáforo por estado: verde = resuelto, amarillo = corregido y en manos de QA, rojo = todavía no se resolvió
+const SEMAFORO = { terminado:'verde', qa:'amarillo' };
+const SEM_COLOR = { verde:'#22c55e', amarillo:'#f59e0b', rojo:'#ef4444' };
+function semOf(bk) { return SEMAFORO[bk] || 'rojo'; }
+function emptyDom() { return { buckets:emptyBuckets(), viejo:{ p:0, s:0 }, tareas:[] }; }
+
 // ============================================================
 // STATE
 // ============================================================
@@ -798,6 +837,10 @@ async function loadCell(cell) {
       // Sprint de ambiente: lo que ya estaba cerrado antes de su inicio vino así de la
       // rama y no es avance de este ambiente.
       const inicioAmb = envOfList(l.name) !== 'ramas' ? fechaDelNombre(l.name) : null;
+      // STAGING: avance por DOMINIO (la subtarea hereda el de su padre si no tiene uno propio)
+      const conDom = envOfList(l.name) === 'staging';
+      const domPorId = {};
+      if (conDom) { row.dom = {}; for (const t of tasks) domPorId[t.id] = domOf(t); }
       for (const t of tasks) {
         // fecha de comienzo del sprint = la tarea más vieja cargada en él
         const creada = Number(t.date_created) || 0;
@@ -809,6 +852,16 @@ async function loadCell(cell) {
         if (inicioAmb && bk === 'terminado') {
           const cerrada = Number(t.date_done || t.date_closed) || 0;
           if (cerrada && cerrada < inicioAmb) row.viejo[isSub ? 's' : 'p']++;
+        }
+        if (conDom) {
+          const dn = domPorId[t.id] || (isSub && domPorId[t.parent]) || SIN_DOM;
+          const d = row.dom[dn] || (row.dom[dn] = emptyDom());
+          d.buckets[bk][isSub ? 's' : 'p']++;
+          if (inicioAmb && bk === 'terminado') {
+            const cerrada = Number(t.date_done || t.date_closed) || 0;
+            if (cerrada && cerrada < inicioAmb) d.viejo[isSub ? 's' : 'p']++;
+          }
+          if (!isSub) d.tareas.push({ id:t.id, n:t.name, st:(t.status && t.status.status) || '', bk, u:t.url || '', subs:0 });
         }
 
         // Cada tarjeta suma al dev que la tiene asignada
@@ -824,6 +877,12 @@ async function loadCell(cell) {
           if (bk === 'reabierta')      row.qa.reabiertas++;   // ya pasada a los devs
           else if (bk === 'terminado') row.qa.validado++;
         }
+      }
+      // cantidad de subtareas de cada tarea (para el detalle del desplegable)
+      if (conDom) {
+        const nSubs = {};
+        for (const t of tasks) if (t.parent) nSubs[t.parent] = (nSubs[t.parent] || 0) + 1;
+        for (const k in row.dom) row.dom[k].tareas.forEach(x => { x.subs = nSubs[x.id] || 0; });
       }
       saveLastGood(row);
       return row;
@@ -1000,6 +1059,16 @@ function viewOf(r, env) {
       v.subsVivas += l.subs;
       v.heredado = (v.heredado || 0) + vj.p + vj.s;              // llegó cerrado de la rama: no es avance
       v.reabiertasAmb += lb.reabierta.p + lb.reabierta.s;
+    }
+    if (env === 'staging' && l.dom) {
+      v.dom = v.dom || {};
+      for (const dn in l.dom) {
+        const src = l.dom[dn], d = v.dom[dn] || (v.dom[dn] = emptyDom());
+        const sb = normBuckets(src.buckets);
+        BUCKETS.forEach(k => { d.buckets[k.key].p += sb[k.key].p; d.buckets[k.key].s += sb[k.key].s; });
+        d.viejo.p += (src.viejo || {}).p || 0; d.viejo.s += (src.viejo || {}).s || 0;
+        d.tareas.push(...(src.tareas || []));
+      }
     }
     const b = normBuckets(l.buckets);
     BUCKETS.forEach(k => { v.buckets[k.key].p += b[k.key].p; v.buckets[k.key].s += b[k.key].s; });
@@ -1249,7 +1318,8 @@ function cellCard(r) {
         <div class="num-box"><div class="n">${fmt(r.reabiertasAmb)}</div><div class="l">Reabiertas</div></div>
         <div class="num-box"><div class="n">${pctDone(r)}%</div><div class="l">Avance</div></div>
       </div>
-      ${r.universo ? `<div><div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">Avance — ${fmt(r.doneP)} de ${fmt(baseDe(r))} resueltas en ${envLabel()} desde el inicio del sprint${r.heredado ? ` · ${fmt(r.heredado)} llegaron cerradas de la rama` : ''}</div>${repruebaBar(r)}</div>` : ''}` : `
+      ${r.universo ? `<div><div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">Avance — ${fmt(r.doneP)} de ${fmt(baseDe(r))} resueltas en ${envLabel()} desde el inicio del sprint${r.heredado ? ` · ${fmt(r.heredado)} llegaron cerradas de la rama` : ''}</div>${repruebaBar(r)}</div>` : ''}
+      ${ENV === 'staging' ? domGroups(r) : ''}` : `
       <div class="nums">
         <div class="num-box"><div class="n">${fmt(r.parents)}</div><div class="l">Tareas</div></div>
         <div class="num-box"><div class="n">${fmt(r.subs)}</div><div class="l">Subtareas</div></div>
@@ -1264,6 +1334,54 @@ function cellCard(r) {
     </div>
   </div>`;
 }
+
+// STAGING: un desplegable por DOMINIO. El % es el mismo cálculo del módulo (terminado en
+// el ambiente / tareas + subtareas) repartido por grupo: los grupos suman el % del módulo.
+const DOM_OPEN = new Set();   // desplegables abiertos: sobreviven al refresco automático
+function domPct(d) {
+  const t = d.buckets, n = BUCKETS.reduce((a, b) => a + t[b.key].p + t[b.key].s, 0);
+  const verde = t.terminado.p + t.terminado.s - d.viejo.p - d.viejo.s;
+  const amarillo = t.qa.p + t.qa.s;
+  return { n, verde, amarillo, viejo:d.viejo.p + d.viejo.s, rojo:n - verde - amarillo - d.viejo.p - d.viejo.s,
+           pct: n ? Math.round(verde * 100 / n) : 0 };
+}
+function domGroups(r) {
+  if (!r.dom) return '';
+  const rank = k => k === SIN_DOM ? 999 : (DOM_ORDEN.indexOf(k) + 1 || 100);
+  const keys = Object.keys(r.dom).sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
+  const rankSem = { rojo:0, amarillo:1, verde:2 };
+  return `<div class="doms">${keys.map(k => {
+    const d = r.dom[k], x = domPct(d), key = r.cell.module + '|' + k;
+    const semPct = x.pct >= 100 ? 'verde' : (x.rojo ? 'rojo' : 'amarillo');
+    const seg = (v, c, l) => v ? `<div class="bar-seg" style="width:${v*100/x.n}%;background:${c}" title="${l}: ${v}"></div>` : '';
+    const tareas = d.tareas.slice().sort((a, b) => rankSem[semOf(a.bk)] - rankSem[semOf(b.bk)] || a.n.localeCompare(b.n));
+    return `<details class="dom" data-k="${escAttr(key)}" ${DOM_OPEN.has(key) ? 'open' : ''}>
+      <summary>
+        <div class="dom-head">
+          <span class="chev">▶</span>
+          <span class="dom-name">${esc(DOM_LABEL[k] || k)}</span>
+          <span class="dom-n">${fmt(d.tareas.length)} tareas · ${fmt(x.n - d.tareas.length)} subt.</span>
+          <span class="dom-pct" style="color:${SEM_COLOR[semPct]}">${x.pct}%</span>
+        </div>
+        <div class="bar">${seg(x.verde, SEM_COLOR.verde, 'Terminado / cerrado')}${seg(x.viejo, '#166534', 'Llegó cerrado de la rama (no cuenta)')}${seg(x.amarillo, SEM_COLOR.amarillo, 'Corregido: listo para QA / en QA')}${seg(x.rojo, SEM_COLOR.rojo, 'Sin resolver: pendiente / reabierta / en curso / en revisión')}</div>
+        <div class="bar-legend">
+          <span class="lg"><span class="dot" style="background:${SEM_COLOR.verde}"></span>Terminado <b>${fmt(x.verde)}</b></span>
+          <span class="lg"><span class="dot" style="background:${SEM_COLOR.amarillo}"></span>En QA <b>${fmt(x.amarillo)}</b></span>
+          <span class="lg"><span class="dot" style="background:${SEM_COLOR.rojo}"></span>Sin resolver <b>${fmt(x.rojo)}</b></span>
+          ${x.viejo ? `<span class="lg"><span class="dot" style="background:#166534"></span>Llegó cerrado <b>${fmt(x.viejo)}</b></span>` : ''}
+        </div>
+      </summary>
+      <div class="dom-tasks">${tareas.map(t => `<div class="dom-task">
+        <span class="dot" style="background:${SEM_COLOR[semOf(t.bk)]}"></span>
+        <a href="${escAttr(t.u)}" target="_blank" title="${escAttr(t.n)}">${esc(t.n)}</a>
+        ${t.subs ? `<span class="ns">${t.subs} subt.</span>` : ''}
+        <span class="st">${esc(t.st)}</span>
+      </div>`).join('')}</div>
+    </details>`;
+  }).join('')}</div>`;
+}
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;' }[c])); }
+function escAttr(s) { return esc(s).replace(/"/g, '&quot;'); }
 
 // Aviso de listas mostradas con su última lectura buena porque ClickUp no respondió
 function staleNote(r) {
@@ -1642,7 +1760,20 @@ if (cached) {
 } else {
   loadAll();
 }
-setInterval(() => loadAll({ background:true }), 5 * 60 * 1000);
+// STAGING se muestra a la gerencia: se relee de ClickUp cada 2 minutos (el resto, cada 5)
+let ultimaLectura = Date.now();
+setInterval(() => {
+  const cada = (ENV === 'staging' ? 2 : 5) * 60 * 1000;
+  if (Date.now() - ultimaLectura < cada - 5000) return;
+  ultimaLectura = Date.now();
+  loadAll({ background:true });
+}, 60 * 1000);
+// abrir/cerrar un DOMINIO se recuerda para que el refresco no lo cierre
+document.getElementById('content').addEventListener('toggle', ev => {
+  const k = ev.target.dataset && ev.target.dataset.k;
+  if (!k) return;
+  if (ev.target.open) DOM_OPEN.add(k); else DOM_OPEN.delete(k);
+}, true);
 </script>
 </body>
 </html>
