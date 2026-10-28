@@ -1395,6 +1395,13 @@ function staleNote(r) {
 // STAGING — Avance: resumen módulo × dominio con el MISMO % de los desplegables (domPct)
 const AVANCE_FILAS = [['Contable','Contable'], ['Cereales','Granos'], ['Insumos','Insumos'], ['Fletes','Fletes'], ['Sueldos','Sueldos']];
 const AVANCE_COLS = ['Listas', 'Registracion', 'Informes', 'Generales'];
+// Color por % (pedido de Lorena 28/10): hasta 25 rojo, hasta 75 blanco, hasta 99 amarillo, 100 verde
+function avanceColor(pct) {
+  if (pct >= 100) return SEM_COLOR.verde;
+  if (pct > 75)   return SEM_COLOR.amarillo;
+  if (pct > 25)   return 'var(--text)';
+  return SEM_COLOR.rojo;
+}
 function renderAvance() {
   const tot = {};
   AVANCE_COLS.forEach(k => tot[k] = emptyDom());
@@ -1402,8 +1409,7 @@ function renderAvance() {
     if (!d) return '<td class="pct" style="color:var(--text-muted)">—</td>';
     const x = domPct(d);
     if (!x.n) return '<td class="pct" style="color:var(--text-muted)">—</td>';
-    const sem = x.pct >= 100 ? 'verde' : (x.rojo ? 'rojo' : 'amarillo');
-    return `<td class="pct" style="color:${SEM_COLOR[sem]}" title="${fmt(x.verde)} terminadas de ${fmt(x.n)}">${x.pct}%</td>`;
+    return `<td class="pct" style="color:${avanceColor(x.pct)}" title="${fmt(x.verde)} terminadas de ${fmt(x.n)}">${x.pct}%</td>`;
   };
   const body = AVANCE_FILAS.map(([mod, label]) => {
     const r = DATA.find(x => isCell(x) && x.cell.module === mod);
