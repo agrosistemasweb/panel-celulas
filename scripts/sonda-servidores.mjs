@@ -26,7 +26,44 @@ const AMBIENTES = [
   { id: 'produccion', nombre: 'Producción', url: 'https://app.agrosistemas.com.ar/ingresar' },
   { id: 'stage', nombre: 'Stage', url: 'https://stage.agrosistemas.com.ar/ingresar' },
   { id: 'devapp', nombre: 'Devapp', url: 'https://devapp.agrosistemas.com.ar/ingresar' },
+  // El panel lo mira la gerencia todos los días: se avisa si la página no carga o si
+  // no trae datos de ClickUp (proxy caído, token vencido, rate limit sostenido).
+  { id: 'panel', nombre: 'Panel Células', url: 'https://agrosistemasweb.github.io/panel-celulas/', chequeo: chequeoPanel },
 ];
+
+// Lista que lee el panel en STAGING (Insumos, la más grande): si el proxy la devuelve, el panel tiene datos.
+const PROXY = 'https://panel-bugs-proxy.lorena-ruiz-e63.workers.dev';
+const LISTA_TESTIGO = '1400450000005520';
+
+async function getConReloj(url, headers) {
+  const ctrl = new AbortController();
+  const reloj = setTimeout(() => ctrl.abort(), TIMEOUT);
+  try {
+    return await fetch(url, { redirect: 'follow', signal: ctrl.signal, headers: { 'User-Agent': 'panel-celulas-sonda/1.0', ...headers } });
+  } finally {
+    clearTimeout(reloj);
+  }
+}
+
+/** Panel: la página tiene que cargar y el proxy tiene que devolver tareas de ClickUp. */
+async function chequeoPanel(amb) {
+  const t0 = Date.now();
+  const r = (httpStatus, error) => ({ httpStatus, ms: Date.now() - t0, huella: null, error });
+  try {
+    const pag = await getConReloj(amb.url);
+    if (pag.status !== 200) return r(0, `la página no carga (${pag.status})`);
+    const api = await getConReloj(`${PROXY}/api/tasks?list_id=${LISTA_TESTIGO}&include_closed=true&subtasks=true&page=0`,
+      { Origin: 'https://agrosistemasweb.github.io' });
+    if (api.status === 401 || api.status === 403) return r(0, `el proxy no tiene acceso a ClickUp (${api.status}): token del worker vencido`);
+    if (api.status === 429) return r(0, 'ClickUp está limitando las consultas (429): el panel no trae datos');
+    if (api.status !== 200) return r(0, `el proxy de ClickUp responde ${api.status}`);
+    const d = await api.json().catch(() => null);
+    if (!d || !Array.isArray(d.tasks) || !d.tasks.length) return r(0, 'ClickUp no devuelve tareas');
+    return r(200, null);
+  } catch (e) {
+    return r(0, e.name === 'AbortError' ? `sin respuesta en ${TIMEOUT} ms` : String(e.message || e).slice(0, 120));
+  }
+}
 
 const args = process.argv.slice(2);
 const opt = (n, def) => {
@@ -88,7 +125,7 @@ async function sondear(amb) {
   let ultimo = null;
   for (let i = 0; i < 3; i++) {
     if (i) await new Promise((r) => setTimeout(r, i * 2500));
-    ultimo = await unIntento(amb);
+    ultimo = await (amb.chequeo || unIntento)(amb);
     if (ultimo.httpStatus >= 200 && ultimo.httpStatus < 400) return { ...ultimo, intentos: i + 1 };
   }
   return { ...ultimo, intentos: 3 };
@@ -98,6 +135,9 @@ async function sondear(amb) {
 function clasificar(r, previo) {
   if (r.httpStatus === 0) {
     return { estado: 'caido', detalle: r.error || 'no responde' };
+  }
+  if (r.httpStatus === 200 && !r.huella && !previo?.huella) {
+    return { estado: 'ok', detalle: `carga y trae datos (${(r.ms / 1000).toFixed(1)} s)` };
   }
   if ([502, 503, 504].includes(r.httpStatus)) {
     return { estado: 'deployando', detalle: `el servidor devuelve ${r.httpStatus} (contenedor reiniciando)` };
