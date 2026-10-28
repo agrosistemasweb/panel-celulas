@@ -1411,9 +1411,18 @@ function renderAvance() {
     if (!x.n) return '<td class="pct" style="color:var(--text-muted)">—</td>';
     return `<td class="pct" style="color:${avanceColor(x.pct)}" title="${fmt(x.verde)} terminadas de ${fmt(x.n)}">${x.pct}%</td>`;
   };
+  // Un módulo que todavía no cargó (o ClickUp no respondió) haría un Total equivocado:
+  // en ese caso el Total muestra «…» y se avisa cuál falta, en vez de un % parcial.
+  const pendiente = '<td class="pct" style="color:var(--text-muted)" title="Esperando datos de ClickUp">…</td>';
+  const faltan = [], viejos = [];
   const body = AVANCE_FILAS.map(([mod, label]) => {
     const r = DATA.find(x => isCell(x) && x.cell.module === mod);
-    const dom = (r && r.dom) || {};
+    if (!r || r.cargando || !r.dom || r.parents + r.subs === 0) {
+      faltan.push(label);
+      return `<tr><td><b>${label}</b></td>${AVANCE_COLS.map(() => pendiente).join('')}</tr>`;
+    }
+    if (r.stale && r.stale.length) viejos.push(`${label} (lectura del ${new Date(Math.min(...r.stale.map(x => x.ts))).toLocaleString('es-AR')})`);
+    const dom = r.dom;
     AVANCE_COLS.forEach(k => {
       const d = dom[k]; if (!d) return;
       BUCKETS.forEach(b => { tot[k].buckets[b.key].p += d.buckets[b.key].p; tot[k].buckets[b.key].s += d.buckets[b.key].s; });
@@ -1425,8 +1434,10 @@ function renderAvance() {
     <div class="sub">% terminado / cerrado HOY en STAGING sobre tareas + subtareas de cada dominio · mismo cálculo que la solapa Células</div>
     <table>
       <thead><tr><th></th>${AVANCE_COLS.map(k => `<th class="pct">${DOM_LABEL[k] || k}</th>`).join('')}</tr></thead>
-      <tbody>${body}<tr class="tot"><td><b>Total</b></td>${AVANCE_COLS.map(k => celda(tot[k])).join('')}</tr></tbody>
+      <tbody>${body}<tr class="tot"><td><b>Total</b></td>${AVANCE_COLS.map(k => faltan.length ? pendiente : celda(tot[k])).join('')}</tr></tbody>
     </table>
+    ${faltan.length ? `<div class="err" style="margin-top:14px">⚠ <b>Total incompleto:</b> ${cargandoAlgo() ? 'todavía se están leyendo' : 'ClickUp no devolvió'} los datos de <b>${faltan.join(', ')}</b>. El Total se muestra cuando están todos los módulos${cargandoAlgo() ? '' : ' — probá en 1 o 2 minutos con <b>Actualizar</b>'}.</div>` : ''}
+    ${viejos.length ? `<div class="note" style="margin-top:10px">ClickUp no respondió en la última lectura: ${viejos.join(' · ')}. Esos módulos muestran su lectura anterior.</div>` : ''}
   </div>`;
 }
 
