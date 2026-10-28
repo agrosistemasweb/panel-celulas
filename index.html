@@ -1001,11 +1001,6 @@ function readCache() {
   } catch (e) { return null; }
 }
 
-// El Contable original es sólo la referencia «vs Contable» (~20 consultas): en los
-// refrescos automáticos se relee cada 30 min, no cada 2.
-const REF_CADA = 30 * 60 * 1000;
-let refLeido = 0;
-
 async function loadAll(opts) {
   const background = !!(opts && opts.background);
   USED_SNAPSHOT = false;
@@ -1023,13 +1018,7 @@ async function loadAll(opts) {
 
   const results = new Array(CELLS.length);
   await Promise.all(CELLS.map(async (c, i) => {
-    const prev = RAW[i];
-    if (c.ref && background && Date.now() - refLeido < REF_CADA && prev && prev.parents + prev.subs) {
-      results[i] = prev;
-      return;
-    }
     const res = await loadCell(c);
-    if (c.ref && !res.error && !res.stale) refLeido = Date.now();
     results[i] = res;
     if (!background) { RAW[i] = res; DATA = RAW.map(r => viewOf(r)); render(); }
   }));
@@ -1820,7 +1809,6 @@ if (cached) {
   DATA = RAW.map(r => viewOf(r));
   document.getElementById('lastUpdated').textContent =
     'Caché ' + new Date(cached.ts).toLocaleString('es-AR');
-  refLeido = cached.ts;
   render();
   loadAll({ background:true });
 } else {
