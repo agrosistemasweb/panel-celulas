@@ -830,6 +830,9 @@ async function loadCell(cell) {
   for (const f of cell.folders) lists.push(...await listsOfFolder(f));
   // las listas DEVAPP están fijas en CELLS (links de Lorena) y además vienen en el folder: una sola vez
   lists = lists.filter((l, i) => lists.findIndex(x => x.id === l.id) === i);
+  // RAMAS está congelado (se muestra RAMAS_CONGELADO): sus listas no se vuelven a leer.
+  // El Contable original (ref) sí las necesita: son sus sprints.
+  if (!cell.ref) lists = lists.filter(l => envOfList(l.name) !== 'ramas');
   // ordenar por número de sprint si lo tiene
   lists.sort((a,b) => {
     const na = parseInt((a.name.match(/\d+/) || ['0'])[0]);
