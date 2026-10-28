@@ -1395,11 +1395,11 @@ function staleNote(r) {
 // STAGING — Avance: resumen módulo × dominio con el MISMO % de los desplegables (domPct)
 const AVANCE_FILAS = [['Contable','Contable'], ['Cereales','Granos'], ['Insumos','Insumos'], ['Fletes','Fletes'], ['Sueldos','Sueldos']];
 const AVANCE_COLS = ['Listas', 'Registracion', 'Informes', 'Generales'];
-// Color por % (pedido de Lorena 28/10): hasta 25 rojo, hasta 75 blanco, hasta 99 amarillo, 100 verde
+// Color por % (pedido de Lorena 28/10): 0-30 rojo, 31-60 amarillo, 61-90 blanco, 91-100 verde
 function avanceColor(pct) {
-  if (pct >= 100) return SEM_COLOR.verde;
-  if (pct > 75)   return SEM_COLOR.amarillo;
-  if (pct > 25)   return 'var(--text)';
+  if (pct > 90) return SEM_COLOR.verde;
+  if (pct > 60) return 'var(--text)';
+  if (pct > 30) return SEM_COLOR.amarillo;
   return SEM_COLOR.rojo;
 }
 function renderAvance() {
