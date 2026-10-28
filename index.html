@@ -1351,7 +1351,6 @@ function domGroups(r) {
   const rankSem = { rojo:0, amarillo:1, verde:2 };
   return `<div class="doms">${keys.map(k => {
     const d = r.dom[k], x = domPct(d), key = r.cell.module + '|' + k;
-    const semPct = x.pct >= 100 ? 'verde' : (x.rojo ? 'rojo' : 'amarillo');
     const seg = (v, c, l) => v ? `<div class="bar-seg" style="width:${v*100/x.n}%;background:${c}" title="${l}: ${v}"></div>` : '';
     const tareas = d.tareas.slice().sort((a, b) => rankSem[semOf(a.bk)] - rankSem[semOf(b.bk)] || a.n.localeCompare(b.n));
     return `<details class="dom" data-k="${escAttr(key)}" ${DOM_OPEN.has(key) ? 'open' : ''}>
@@ -1360,7 +1359,7 @@ function domGroups(r) {
           <span class="chev">▶</span>
           <span class="dom-name">${esc(DOM_LABEL[k] || k)}</span>
           <span class="dom-n">${fmt(d.tareas.length)} tareas · ${fmt(x.n - d.tareas.length)} subt.</span>
-          <span class="dom-pct" style="color:${SEM_COLOR[semPct]}">${x.pct}%</span>
+          <span class="dom-pct" style="color:${avanceColor(x.pct)}">${x.pct}%</span>
         </div>
         <div class="bar">${seg(x.verde, SEM_COLOR.verde, 'Terminado / cerrado')}${seg(x.amarillo, SEM_COLOR.amarillo, 'Corregido: listo para QA / en QA')}${seg(x.rojo, SEM_COLOR.rojo, 'Sin resolver: pendiente / reabierta / en curso / en revisión')}</div>
         <div class="bar-legend">
