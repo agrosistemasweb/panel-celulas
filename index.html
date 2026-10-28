@@ -118,6 +118,16 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif
 .dom-task .st { font-size:10px; color:var(--text-muted); text-transform:uppercase; white-space:nowrap; }
 .dom-task .ns { font-size:10px; color:var(--text-muted); white-space:nowrap; }
 
+/* STAGING: solapa Avance (resumen para gerencia: módulo × dominio) */
+.avance-wrap { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:22px 24px; max-width:900px; }
+.avance-wrap h2 { font-size:16px; font-weight:700; margin:0 0 4px; }
+.avance-wrap .sub { font-size:12px; color:var(--text-muted); margin-bottom:16px; }
+.avance-wrap table { min-width:0; font-size:14px; }
+.avance-wrap th, .avance-wrap td { padding:10px 14px; }
+.avance-wrap td.pct { text-align:center; font-weight:800; font-size:16px; font-variant-numeric:tabular-nums; }
+.avance-wrap th.pct { text-align:center; }
+.avance-wrap tr.tot td { border-top:2px solid var(--border); }
+
 /* Tabla comparativa */
 .table-wrap { background:var(--surface); border:1px solid var(--border); border-radius:14px; overflow:auto; }
 table { width:100%; border-collapse:collapse; font-size:13px; min-width:900px; }
@@ -199,6 +209,7 @@ a.link:hover { text-decoration:underline; }
 <div class="totalizers" id="totalizers"></div>
 
 <div class="tabs">
+  <button class="tab" data-tab="avance" id="tabAvance" hidden>Avance</button>
   <button class="tab active" data-tab="celulas">Células</button>
   <button class="tab" data-tab="comparativa">Comparativa vs Contable</button>
   <button class="tab" data-tab="detalle">Detalle por sprint</button>
@@ -1394,6 +1405,39 @@ function staleNote(r) {
   return `<div class="note">ClickUp no respondió (${errs}): ${detalle}.</div>`;
 }
 
+// STAGING — Avance: resumen módulo × dominio con el MISMO % de los desplegables (domPct)
+const AVANCE_FILAS = [['Contable','Contable'], ['Cereales','Granos'], ['Insumos','Insumos'], ['Fletes','Fletes'], ['Sueldos','Sueldos']];
+const AVANCE_COLS = ['Listas', 'Registracion', 'Informes'];
+function renderAvance() {
+  const tot = {};
+  AVANCE_COLS.forEach(k => tot[k] = emptyDom());
+  const celda = d => {
+    if (!d) return '<td class="pct" style="color:var(--text-muted)">—</td>';
+    const x = domPct(d);
+    if (!x.n) return '<td class="pct" style="color:var(--text-muted)">—</td>';
+    const sem = x.pct >= 100 ? 'verde' : (x.rojo ? 'rojo' : 'amarillo');
+    return `<td class="pct" style="color:${SEM_COLOR[sem]}" title="${fmt(x.verde)} terminadas de ${fmt(x.n)}">${x.pct}%</td>`;
+  };
+  const body = AVANCE_FILAS.map(([mod, label]) => {
+    const r = DATA.find(x => isCell(x) && x.cell.module === mod);
+    const dom = (r && r.dom) || {};
+    AVANCE_COLS.forEach(k => {
+      const d = dom[k]; if (!d) return;
+      BUCKETS.forEach(b => { tot[k].buckets[b.key].p += d.buckets[b.key].p; tot[k].buckets[b.key].s += d.buckets[b.key].s; });
+      tot[k].viejo.p += d.viejo.p; tot[k].viejo.s += d.viejo.s;
+    });
+    return `<tr><td><b>${label}</b></td>${AVANCE_COLS.map(k => celda(dom[k])).join('')}</tr>`;
+  }).join('');
+  return `<div class="avance-wrap">
+    <h2>Grado de avance (staging)</h2>
+    <div class="sub">% terminado / cerrado en STAGING sobre tareas + subtareas de cada dominio · mismo cálculo que la solapa Células</div>
+    <table>
+      <thead><tr><th></th>${AVANCE_COLS.map(k => `<th class="pct">${DOM_LABEL[k] || k}</th>`).join('')}</tr></thead>
+      <tbody>${body}<tr class="tot"><td><b>Total</b></td>${AVANCE_COLS.map(k => celda(tot[k])).join('')}</tr></tbody>
+    </table>
+  </div>`;
+}
+
 function renderCelulas() {
   return `<div class="cells-grid">${DATA.filter(isCell).map(cellCard).join('')}</div>`;
 }
@@ -1671,6 +1715,13 @@ function motivoCorto() {
 }
 
 function render() {
+  // la solapa Avance sólo existe en STAGING (es donde se carga el DOMINIO)
+  const tabAv = document.getElementById('tabAvance');
+  tabAv.hidden = ENV !== 'staging';
+  if (currentTab === 'avance' && ENV !== 'staging') {
+    currentTab = 'celulas';
+    document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x.dataset.tab === 'celulas'));
+  }
   renderEnvbar();
   renderTotalizers();
   const el = document.getElementById('content');
@@ -1679,7 +1730,8 @@ function render() {
     : '') + (ENV === 'ramas' && currentTab !== 'servidores'
     ? `<div class="note" style="margin-bottom:14px">🔒 <b>RAMAS congelado al ${RAMAS_CONGELADO.fecha}</b>: es la foto final de las pruebas en ramas separadas y ya no se actualiza. Lo pendiente se movió a los sprints de los ambientes, donde se sigue contando (DEVAPP, STAGING, PRODUCCIÓN).</div>`
     : '');
-  if (currentTab === 'celulas')     el.innerHTML = banner + renderCelulas();
+  if (currentTab === 'avance')      el.innerHTML = banner + renderAvance();
+  else if (currentTab === 'celulas') el.innerHTML = banner + renderCelulas();
   else if (currentTab === 'comparativa') el.innerHTML = banner + renderComparativa();
   else if (currentTab === 'servidores')  el.innerHTML = renderServidores();
   else                              el.innerHTML = banner + renderDetalle();
