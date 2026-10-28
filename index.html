@@ -700,7 +700,7 @@ function domOf(t) {
 const SEMAFORO = { terminado:'verde', qa:'amarillo' };
 const SEM_COLOR = { verde:'#22c55e', amarillo:'#f59e0b', rojo:'#ef4444' };
 function semOf(bk) { return SEMAFORO[bk] || 'rojo'; }
-function emptyDom() { return { buckets:emptyBuckets(), viejo:{ p:0, s:0 }, tareas:[] }; }
+function emptyDom() { return { buckets:emptyBuckets(), tareas:[] }; }
 
 // ============================================================
 // STATE
@@ -844,10 +844,9 @@ async function loadCell(cell) {
     try {
       const tasks = await tasksOfList(l.id);
       const row = { id:l.id, name:l.name, parents:0, subs:0, buckets:emptyBuckets(),
-                    qa:emptyQa(), byUser:{}, sinAsignar:0, desde:null, viejo:{ p:0, s:0 } };
-      // Sprint de ambiente: lo que ya estaba cerrado antes de su inicio vino así de la
-      // rama y no es avance de este ambiente.
-      const inicioAmb = envOfList(l.name) !== 'ramas' ? fechaDelNombre(l.name) : null;
+                    qa:emptyQa(), byUser:{}, sinAsignar:0, desde:null };
+      // Se cuenta el estado de HOY: todo lo que figura terminado o cerrado en ClickUp es
+      // avance, sin importar cuándo se cerró (no hay corte histórico por inicio del sprint).
       // STAGING: avance por DOMINIO (la subtarea hereda el de su padre si no tiene uno propio)
       const conDom = envOfList(l.name) === 'staging';
       const domPorId = {};
@@ -860,18 +859,10 @@ async function loadCell(cell) {
         const bk = bucketOf(t.status && t.status.status);
         if (isSub) { row.subs++; row.buckets[bk].s++; }
         else       { row.parents++; row.buckets[bk].p++; }
-        if (inicioAmb && bk === 'terminado') {
-          const cerrada = Number(t.date_done || t.date_closed) || 0;
-          if (cerrada && cerrada < inicioAmb) row.viejo[isSub ? 's' : 'p']++;
-        }
         if (conDom) {
           const dn = domPorId[t.id] || (isSub && domPorId[t.parent]) || SIN_DOM;
           const d = row.dom[dn] || (row.dom[dn] = emptyDom());
           d.buckets[bk][isSub ? 's' : 'p']++;
-          if (inicioAmb && bk === 'terminado') {
-            const cerrada = Number(t.date_done || t.date_closed) || 0;
-            if (cerrada && cerrada < inicioAmb) d.viejo[isSub ? 's' : 'p']++;
-          }
           if (!isSub) d.tareas.push({ id:t.id, n:t.name, st:(t.status && t.status.status) || '', bk, u:t.url || '', subs:0 });
         }
 
@@ -1062,13 +1053,11 @@ function viewOf(r, env) {
     v.parents += l.parents; v.subs += l.subs;
     if (v.reprueba) {
       const lb = normBuckets(l.buckets);
-      const vj = l.viejo || { p:0, s:0 };
-      v.donePp += lb.terminado.p - vj.p;                         // probado y resuelto en este ambiente
-      v.donePs += lb.terminado.s - vj.s;
-      v.doneP += lb.terminado.p + lb.terminado.s - vj.p - vj.s;
+      v.donePp += lb.terminado.p;                                // terminado o cerrado hoy
+      v.donePs += lb.terminado.s;
+      v.doneP += lb.terminado.p + lb.terminado.s;
       v.universo += l.parents;
       v.subsVivas += l.subs;
-      v.heredado = (v.heredado || 0) + vj.p + vj.s;              // llegó cerrado de la rama: no es avance
       v.reabiertasAmb += lb.reabierta.p + lb.reabierta.s;
     }
     if (env === 'staging' && l.dom) {
@@ -1077,7 +1066,6 @@ function viewOf(r, env) {
         const src = l.dom[dn], d = v.dom[dn] || (v.dom[dn] = emptyDom());
         const sb = normBuckets(src.buckets);
         BUCKETS.forEach(k => { d.buckets[k.key].p += sb[k.key].p; d.buckets[k.key].s += sb[k.key].s; });
-        d.viejo.p += (src.viejo || {}).p || 0; d.viejo.s += (src.viejo || {}).s || 0;
         d.tareas.push(...(src.tareas || []));
       }
     }
@@ -1188,9 +1176,7 @@ function repruebaBar(r) {
   const U = baseDe(r);
   if (!U) return '<div class="bar"></div>';
   const enAmb = r.lists.reduce((a, l) => a + l.parents, 0) + r.subsVivas;
-  const viejo = r.lists.reduce((a, l) => a + ((l.viejo || {}).p || 0) + ((l.viejo || {}).s || 0), 0);
-  const segs = BUCKETS.map(b => ({ b, v:r.buckets[b.key].p + r.buckets[b.key].s - (b.key === 'terminado' ? viejo : 0) }))
-    .concat([{ b:{ label:'Llegó cerrado de la rama (no cuenta)', color:'#166534' }, v:viejo }]);
+  const segs = BUCKETS.map(b => ({ b, v:r.buckets[b.key].p + r.buckets[b.key].s }));
   return `<div class="bar">${segs.map(x => x.v ? `<div class="bar-seg" style="width:${x.v*100/U}%;background:${x.b.color}" title="${x.b.label}: ${x.v}"></div>` : '').join('')}</div>
     <div class="bar-legend">${segs.map(x => x.v ? `<span class="lg"><span class="dot" style="background:${x.b.color}"></span>${x.b.label} <b>${fmt(x.v)}</b></span>` : '').join('')}</div>`;
 }
@@ -1228,7 +1214,6 @@ function renderTotalizers() {
   // Falta = lo que no está terminado ni cerrado (lo que llegó cerrado de la rama no falta, pero tampoco es avance)
   const faltaP = real.reduce((a,r) => a + r.parents - r.buckets.terminado.p, 0);
   const faltaS = real.reduce((a,r) => a + r.subs - r.buckets.terminado.s, 0);
-  const heredado = real.reduce((a,r) => a + (r.heredado || 0), 0);
   const reab = real.reduce((a,r) => a + (r.reabiertasAmb || 0), 0);
   const sprints = real.reduce((a,r) => a + r.lists.length, 0);
   const activas = DATA.filter(r => isCell(r) && r.cell.space).length;
@@ -1240,7 +1225,7 @@ function renderTotalizers() {
       ? { lbl:'Total ' + envLabel(), val:fmt(totP + totS), ps:[['P',totP],['S',totS]], sub:`${fmt(totP)} tareas · ${fmt(totS)} subtareas en los sprints de ${envLabel()} · ${fmt(reab)} reabiertas` }
       : { lbl:'Total ' + envLabel(), val:fmt(P + S), sub:`${fmt(P)} tareas · ${fmt(S)} subtareas`, ps:[['P',P],['S',S]] },
     { lbl:'Falta (abiertas)', val:fmt(faltaP + faltaS), sub:`tareas + subtareas sin terminar ni cerrar en ${envLabel()}`, ps:[['P',faltaP],['S',faltaS]] },
-    { lbl:'Terminado / cerrado', val:fmt(hechoP + hechoS), sub: amb ? `resueltas en ${envLabel()} desde el inicio del sprint${heredado ? ` · ${fmt(heredado)} llegaron cerradas de la rama (no cuentan)` : ''}` : 'tareas + subtareas terminadas', ps:[['P',hechoP],['S',hechoS]] },
+    { lbl:'Terminado / cerrado', val:fmt(hechoP + hechoS), sub: amb ? `terminadas o cerradas hoy en ${envLabel()}` : 'tareas + subtareas terminadas', ps:[['P',hechoP],['S',hechoS]] },
     { lbl:'% de avance ' + envLabel(), val:`${(amb ? B : P+S) ? Math.round(done*100/(amb ? B : P+S)) : 0}%`, sub:`${fmt(done)} de ${fmt(amb ? B : P+S)} ${amb ? 'tareas + subtareas' : ''} · ${sprints} sprints` }
   ];
   if (cargandoAlgo()) cards.slice(1).forEach(c => { c.val = '…'; c.sub = 'leyendo los sprints de ClickUp…'; delete c.ps; });
@@ -1329,7 +1314,7 @@ function cellCard(r) {
         <div class="num-box"><div class="n">${fmt(r.reabiertasAmb)}</div><div class="l">Reabiertas</div></div>
         <div class="num-box"><div class="n">${pctDone(r)}%</div><div class="l">Avance</div></div>
       </div>
-      ${r.universo ? `<div><div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">Avance — ${fmt(r.doneP)} de ${fmt(baseDe(r))} resueltas en ${envLabel()} desde el inicio del sprint${r.heredado ? ` · ${fmt(r.heredado)} llegaron cerradas de la rama` : ''}</div>${repruebaBar(r)}</div>` : ''}
+      ${r.universo ? `<div><div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">Avance — ${fmt(r.doneP)} de ${fmt(baseDe(r))} terminadas o cerradas hoy en ${envLabel()}</div>${repruebaBar(r)}</div>` : ''}
       ${ENV === 'staging' ? domGroups(r) : ''}` : `
       <div class="nums">
         <div class="num-box"><div class="n">${fmt(r.parents)}</div><div class="l">Tareas</div></div>
@@ -1351,9 +1336,9 @@ function cellCard(r) {
 const DOM_OPEN = new Set();   // desplegables abiertos: sobreviven al refresco automático
 function domPct(d) {
   const t = d.buckets, n = BUCKETS.reduce((a, b) => a + t[b.key].p + t[b.key].s, 0);
-  const verde = t.terminado.p + t.terminado.s - d.viejo.p - d.viejo.s;
+  const verde = t.terminado.p + t.terminado.s;
   const amarillo = t.qa.p + t.qa.s;
-  return { n, verde, amarillo, viejo:d.viejo.p + d.viejo.s, rojo:n - verde - amarillo - d.viejo.p - d.viejo.s,
+  return { n, verde, amarillo, rojo:n - verde - amarillo,
            pct: n ? Math.round(verde * 100 / n) : 0 };
 }
 function domGroups(r) {
@@ -1374,12 +1359,11 @@ function domGroups(r) {
           <span class="dom-n">${fmt(d.tareas.length)} tareas · ${fmt(x.n - d.tareas.length)} subt.</span>
           <span class="dom-pct" style="color:${SEM_COLOR[semPct]}">${x.pct}%</span>
         </div>
-        <div class="bar">${seg(x.verde, SEM_COLOR.verde, 'Terminado / cerrado')}${seg(x.viejo, '#166534', 'Llegó cerrado de la rama (no cuenta)')}${seg(x.amarillo, SEM_COLOR.amarillo, 'Corregido: listo para QA / en QA')}${seg(x.rojo, SEM_COLOR.rojo, 'Sin resolver: pendiente / reabierta / en curso / en revisión')}</div>
+        <div class="bar">${seg(x.verde, SEM_COLOR.verde, 'Terminado / cerrado')}${seg(x.amarillo, SEM_COLOR.amarillo, 'Corregido: listo para QA / en QA')}${seg(x.rojo, SEM_COLOR.rojo, 'Sin resolver: pendiente / reabierta / en curso / en revisión')}</div>
         <div class="bar-legend">
           <span class="lg"><span class="dot" style="background:${SEM_COLOR.verde}"></span>Terminado <b>${fmt(x.verde)}</b></span>
           <span class="lg"><span class="dot" style="background:${SEM_COLOR.amarillo}"></span>En QA <b>${fmt(x.amarillo)}</b></span>
           <span class="lg"><span class="dot" style="background:${SEM_COLOR.rojo}"></span>Sin resolver <b>${fmt(x.rojo)}</b></span>
-          ${x.viejo ? `<span class="lg"><span class="dot" style="background:#166534"></span>Llegó cerrado <b>${fmt(x.viejo)}</b></span>` : ''}
         </div>
       </summary>
       <div class="dom-tasks">${tareas.map(t => `<div class="dom-task">
@@ -1424,13 +1408,12 @@ function renderAvance() {
     AVANCE_COLS.forEach(k => {
       const d = dom[k]; if (!d) return;
       BUCKETS.forEach(b => { tot[k].buckets[b.key].p += d.buckets[b.key].p; tot[k].buckets[b.key].s += d.buckets[b.key].s; });
-      tot[k].viejo.p += d.viejo.p; tot[k].viejo.s += d.viejo.s;
     });
     return `<tr><td><b>${label}</b></td>${AVANCE_COLS.map(k => celda(dom[k])).join('')}</tr>`;
   }).join('');
   return `<div class="avance-wrap">
     <h2>Grado de avance (staging)</h2>
-    <div class="sub">% terminado / cerrado en STAGING sobre tareas + subtareas de cada dominio · mismo cálculo que la solapa Células</div>
+    <div class="sub">% terminado / cerrado HOY en STAGING sobre tareas + subtareas de cada dominio · mismo cálculo que la solapa Células</div>
     <table>
       <thead><tr><th></th>${AVANCE_COLS.map(k => `<th class="pct">${DOM_LABEL[k] || k}</th>`).join('')}</tr></thead>
       <tbody>${body}<tr class="tot"><td><b>Total</b></td>${AVANCE_COLS.map(k => celda(tot[k])).join('')}</tr></tbody>
