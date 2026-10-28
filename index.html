@@ -707,7 +707,7 @@ function emptyDom() { return { buckets:emptyBuckets(), viejo:{ p:0, s:0 }, tarea
 // ============================================================
 let RAW = [];           // lo leído de ClickUp: cada célula con TODAS sus listas (todos los ambientes)
 let DATA = [];          // RAW recortado al ambiente elegido: [{cell, lists, parents, subs, buckets, error}]
-let currentTab = 'celulas';
+let currentTab = ENV === 'staging' ? 'avance' : 'celulas';   // en STAGING arranca en Avance
 let USED_SNAPSHOT = false;   // true si el proxy no respondió y se usó el snapshot embebido
 
 // ============================================================
@@ -1718,10 +1718,8 @@ function render() {
   // la solapa Avance sólo existe en STAGING (es donde se carga el DOMINIO)
   const tabAv = document.getElementById('tabAvance');
   tabAv.hidden = ENV !== 'staging';
-  if (currentTab === 'avance' && ENV !== 'staging') {
-    currentTab = 'celulas';
-    document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x.dataset.tab === 'celulas'));
-  }
+  if (currentTab === 'avance' && ENV !== 'staging') currentTab = 'celulas';
+  document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x.dataset.tab === currentTab));
   renderEnvbar();
   renderTotalizers();
   const el = document.getElementById('content');
@@ -1785,6 +1783,7 @@ document.getElementById('envbar').addEventListener('click', ev => {
   const b = ev.target.closest('.env-btn');
   if (!b || b.dataset.env === ENV) return;
   ENV = b.dataset.env;
+  if (ENV === 'staging' && currentTab !== 'servidores') currentTab = 'avance';
   try { localStorage.setItem('panelCelulas.env', ENV); } catch (e) {}
   try { const u = new URL(location.href); u.searchParams.set('env', ENV); history.replaceState(null, '', u); } catch (e) {}
   DATA = RAW.map(r => viewOf(r));
