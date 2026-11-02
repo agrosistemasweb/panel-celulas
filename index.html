@@ -211,7 +211,6 @@ a.link:hover { text-decoration:underline; }
 <div class="tabs">
   <button class="tab" data-tab="avance" id="tabAvance" hidden>Avance</button>
   <button class="tab active" data-tab="celulas">Células</button>
-  <button class="tab" data-tab="comparativa">Comparativa</button>
   <button class="tab" data-tab="detalle">Detalle por sprint</button>
   <button class="tab" data-tab="servidores">Estado de servidores <span class="srv-dot" id="srvDot"></span></button>
 </div>
@@ -980,7 +979,17 @@ function readCache() {
   } catch (e) { return null; }
 }
 
+// Una sola lectura a la vez: si una carga tardaba más que el intervalo de refresco
+// (2 min en STAGING), arrancaba otra encima («actualizando… · actualizando…»),
+// se duplicaban los pedidos a ClickUp y el 429 hacía que tardaran todavía más.
+let CARGANDO = false;
 async function loadAll(opts) {
+  if (CARGANDO) return;
+  CARGANDO = true;
+  try { await cargarTodo(opts); } finally { CARGANDO = false; }
+}
+
+async function cargarTodo(opts) {
   const background = !!(opts && opts.background);
   USED_SNAPSHOT = false;
   LAST_ERR = null;
@@ -1433,84 +1442,6 @@ function renderCelulas() {
 }
 
 // ============================================================
-// RENDER — Comparativa
-// ============================================================
-function renderComparativa() {
-  const base = baseline();
-  const baseT = base.parents + base.subs || 1;
-  const conRef = ENV === 'ramas' && base.parents + base.subs > 0;   // sin el Contable original no hay referencia
-  const rows = DATA.filter(r => r.cell.space && (conRef || !r.cell.ref));
-  const max = Math.max(...rows.map(total), 1);
-
-  const chart = `
-  <div class="chart-card">
-    <h2>Volumen de trabajo por módulo</h2>
-    <div class="hint">Barra proporcional al total de tarjetas (tareas + subtareas) en ${envLabel()}.${conRef ? ` El Contable original es la referencia: ${fmt(base.parents)} tareas y ${fmt(base.subs)} subtareas en ${base.lists.length} sprints.` : ''}</div>
-    ${rows.map(r => {
-      const t = total(r);
-      const w = t * 100 / max;
-      const pw = t ? r.parents * 100 / t : 0;
-      return `<div class="hbar-row">
-        <div class="hbar-lbl"><span class="sq" style="background:${r.cell.hex}"></span>${r.cell.module}</div>
-        <div class="hbar-outer">
-          <div class="hbar-track" style="width:${w}%">
-            <div class="hbar-p" style="width:${pw}%;background:${r.cell.hex}">${r.parents ? fmt(r.parents) : ''}</div>
-            <div class="hbar-s" style="width:${100-pw}%;background:${r.cell.hex}66;color:var(--text)">${r.subs ? fmt(r.subs) : ''}</div>
-          </div>
-        </div>
-        <div class="hbar-val"><b>${fmt(t)}</b>${conRef ? ` · ${Math.round(t*100/baseT)}% del Contable` : ''}</div>
-      </div>`;
-    }).join('')}
-    <div class="bar-legend" style="margin-top:14px">
-      <span class="lg"><span class="dot" style="background:#6366f1"></span>Tareas padre (color pleno)</span>
-      <span class="lg"><span class="dot" style="background:#6366f166"></span>Subtareas (color claro)</span>
-    </div>
-  </div>`;
-
-  const head = `<tr>
-    <th>Célula</th><th>Módulo</th><th>Integrantes</th>
-    <th class="num">Sprints</th><th class="num">Tareas</th><th class="num">Subtareas</th><th class="num">Total</th>
-    <th class="num">Subt/Tarea</th>${conRef ? '<th class="num">% vs Contable</th>' : ''}<th class="num">Terminado</th><th class="num">% avance</th>
-  </tr>`;
-
-  const body = DATA.filter(r => conRef || !r.cell.ref).map(r => {
-    const c = r.cell;
-    const t = total(r);
-    if (c.qa) {
-      const q = qaStats();
-      const donde = q.porLista.filter(x => x.cola > 0).map(x => `${x.module} · ${x.name} (${fmt(x.cola)})`).join(' · ') || 'sin pendientes';
-      return `<tr><td>QA</td><td>${c.module}</td><td>${c.members.map(i=>PEOPLE[i].name).join(', ')}</td>
-        <td class="num" colspan="${conRef ? 8 : 7}" style="color:var(--text-muted)">Transversal — ${fmt(q.cola)} a probar (Listo para QA / En QA asignadas a QA) · ${fmt(q.validado)} validadas → ${donde}</td></tr>`;
-    }
-    if (!c.space) {
-      return `<tr><td>${c.n}</td><td>${c.module}</td><td>${c.members.map(i=>PEOPLE[i].name).join(', ')}</td>
-        <td class="num" colspan="${conRef ? 8 : 7}" style="color:var(--text-muted)">Sin space en ClickUp — backlog no cargado</td></tr>`;
-    }
-    return `<tr class="${c.baseline?'baseline':''}">
-      <td>${c.n}</td><td>${c.module}</td><td>${c.members.map(i=>PEOPLE[i].name).join(', ')}</td>
-      <td class="num">${r.lists.length}</td>
-      <td class="num">${fmt(r.parents)}</td>
-      <td class="num">${fmt(r.subs)}</td>
-      <td class="num">${fmt(t)}</td>
-      <td class="num">${r.parents ? (r.subs/r.parents).toFixed(1) : '—'}</td>
-      ${conRef ? `<td class="num">${Math.round(t*100/baseT)}%</td>` : ''}
-      <td class="num">${fmt(doneOf(r))}</td>
-      <td class="num">${pctDone(r)}%</td>
-    </tr>`;
-  }).join('');
-
-  const real = DATA.filter(r => isCell(r) && r.cell.space && !r.cell.qa);
-  const tp = real.reduce((a,r)=>a+r.parents,0), ts = real.reduce((a,r)=>a+r.subs,0), td = real.reduce((a,r)=>a+doneOf(r),0);
-  const foot = `<tr class="tot"><td colspan="3">TOTAL con backlog cargado</td>
-    <td class="num">${real.reduce((a,r)=>a+r.lists.length,0)}</td>
-    <td class="num">${fmt(tp)}</td><td class="num">${fmt(ts)}</td><td class="num">${fmt(tp+ts)}</td>
-    <td class="num">${tp ? (ts/tp).toFixed(1) : '—'}</td><td class="num">—</td>
-    <td class="num">${fmt(td)}</td><td class="num">${tp+ts ? Math.round(td*100/(tp+ts)) : 0}%</td></tr>`;
-
-  return chart + `<div class="table-wrap"><table>${head}${body}${foot}</table></div>`;
-}
-
-// ============================================================
 // RENDER — Detalle por sprint
 // ============================================================
 function renderDetalle() {
@@ -1720,7 +1651,6 @@ function render() {
     : '');
   if (currentTab === 'avance')      el.innerHTML = banner + renderAvance();
   else if (currentTab === 'celulas') el.innerHTML = banner + renderCelulas();
-  else if (currentTab === 'comparativa') el.innerHTML = banner + renderComparativa();
   else if (currentTab === 'servidores')  el.innerHTML = renderServidores();
   else                              el.innerHTML = banner + renderDetalle();
 }
