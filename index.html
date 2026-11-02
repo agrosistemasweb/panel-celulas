@@ -723,17 +723,31 @@ function release() {
 function accesoRoto() { return LAST_ERR === 401 || LAST_ERR === 403 || LAST_ERR === 'red'; }
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+const PEDIDO_TIMEOUT = 20000;   // ms: una página normal tarda 1-4 s
 
 // Reintenta 429 y 5xx con backoff: el 429 es transitorio, no un fallo de datos.
 async function jget(path, tries = 5) {
   for (let i = 1; ; i++) {
     await acquire();
-    let r;
-    try { r = await fetch(PROXY + path); }
-    catch (e) { release(); if (i >= tries) { LAST_ERR = 'red'; throw e; } await sleep(600 * i); continue; }
-    finally { if (r) release(); }
+    // Tope por pedido (incluida la lectura de la respuesta): si ClickUp o el worker se
+    // cuelgan, se corta y se reintenta. Sin esto una sola página colgada dejaba la célula
+    // «cargando» para siempre y, con una sola lectura a la vez, no arrancaba el refresco.
+    const ctrl = new AbortController();
+    const reloj = setTimeout(() => ctrl.abort(), PEDIDO_TIMEOUT);
+    let r, data, err = null;
+    try {
+      r = await fetch(PROXY + path, { signal: ctrl.signal });
+      if (r.ok) data = await r.json();
+    } catch (e) { err = e; }
+    finally { clearTimeout(reloj); release(); }   // el lugar se libera antes de esperar
 
-    if (r.ok) return r.json();
+    if (err) {
+      if (i >= tries) { LAST_ERR = 'red'; throw err; }
+      await sleep(600 * i);
+      continue;
+    }
+
+    if (r.ok) return data;
 
     if ((r.status === 429 || r.status >= 500) && i < tries) {
       const ra = parseFloat(r.headers.get('retry-after') || '0');
