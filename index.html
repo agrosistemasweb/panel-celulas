@@ -1462,8 +1462,8 @@ function renderAvance() {
 const PLAN_LINEAR = {
   ui:   { desc:'proyectos «Diseño · …» de Linear',
           es:(p, i) => /^Diseño · /.test(p.proyecto) },
-  mcp:  { desc:'issues «MCP · …» de Linear',
-          es:(p, i) => /^MCP · /.test(i.t) },
+  mcp:  { desc:'proyecto «MCP» de Linear',
+          es:(p, i) => p.proyecto === 'MCP' },
   conc: { desc:'issues de conciliación automática o carga/lectura de comprobantes (fuera de Diseño)',
           es:(p, i) => !/^Diseño · /.test(p.proyecto) && /concilia|carga comprobantes|lectura de comprobantes|comprobantes por imagen/i.test(i.t) }
 };
