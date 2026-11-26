@@ -998,6 +998,7 @@ function readCache() {
 // se duplicaban los pedidos a ClickUp y el 429 hacía que tardaran todavía más.
 let CARGANDO = false;
 async function loadAll(opts) {
+  pedirLinear();
   if (CARGANDO) return;
   CARGANDO = true;
   try { await cargarTodo(opts); } finally { CARGANDO = false; }
@@ -1457,6 +1458,15 @@ function renderAvance() {
 // Siempre se calcula sobre STAGING, sin importar el ambiente elegido arriba.
 // Los frentes de diseño (UI unificada, MCP, Conciliación y lectura) se siguen en Linear:
 // quedan «esperando conexión» hasta que el worker tenga acceso a Linear.
+// Qué issues de Linear cuentan para cada frente (se lee de /api/linear/estado del worker).
+const PLAN_LINEAR = {
+  ui:   { desc:'proyectos «Diseño · …» de Linear',
+          es:(p, i) => /^Diseño · /.test(p.proyecto) },
+  mcp:  { desc:'issues «MCP · …» de Linear',
+          es:(p, i) => /^MCP · /.test(i.t) },
+  conc: { desc:'issues de conciliación automática o carga/lectura de comprobantes (fuera de Diseño)',
+          es:(p, i) => !/^Diseño · /.test(p.proyecto) && /concilia|carga comprobantes|lectura de comprobantes|comprobantes por imagen/i.test(i.t) }
+};
 const PLAN_FRENTES = [
   { key:'ui',    titulo:'UI unificada (migrada)',                 dueno:'Facundo',           fecha:'2026-11-27', fuente:'linear' },
   { key:'bugs',  titulo:'Bugs a cero',                            dueno:'Tiago · Pablo',     fecha:'2026-12-01', fuente:'clickup' },
@@ -1480,11 +1490,39 @@ function diasChip(iso, pct) {
   if (d === 0) return `<div class="plan-dias" style="color:${SEM_COLOR.rojo}">vence hoy</div>`;
   return `<div class="plan-dias" style="color:${d <= 3 ? SEM_COLOR.amarillo : 'var(--text-muted)'}">faltan ${d} día${d === 1 ? '' : 's'}</div>`;
 }
-function barra3(verde, amarillo, rojo) {
+function barra3(verde, amarillo, rojo, lblAm = 'En QA') {
   const n = verde + amarillo + rojo;
   if (!n) return '<div class="bar"></div>';
   const seg = (v, c, l) => v ? `<div class="bar-seg" style="width:${v * 100 / n}%;background:${c}" title="${l}: ${fmt(v)}"></div>` : '';
-  return `<div class="bar">${seg(verde, SEM_COLOR.verde, 'Terminado / cerrado')}${seg(amarillo, SEM_COLOR.amarillo, 'En QA')}${seg(rojo, SEM_COLOR.rojo, 'Sin resolver')}</div>`;
+  return `<div class="bar">${seg(verde, SEM_COLOR.verde, 'Terminado / cerrado')}${seg(amarillo, SEM_COLOR.amarillo, lblAm)}${seg(rojo, SEM_COLOR.rojo, 'Sin resolver')}</div>`;
+}
+
+// Linear: una sola lectura (el worker la cachea 5 min). null = todavía no llegó.
+let LINEAR = null, LINEAR_ERR = null, LINEAR_PIDIENDO = false;
+async function pedirLinear() {
+  if (LINEAR_PIDIENDO) return;
+  LINEAR_PIDIENDO = true;
+  try {
+    const r = await fetch(PROXY + '/api/linear/estado', { signal: AbortSignal.timeout(30000) });
+    const j = await r.json();
+    if (!r.ok || j.error) throw new Error(j.error || ('HTTP ' + r.status));
+    LINEAR = j; LINEAR_ERR = null;
+  } catch (e) { LINEAR_ERR = e.message || String(e); }
+  finally { LINEAR_PIDIENDO = false; if (currentTab === 'plan') render(); }
+}
+// Estados de Linear por tipo: completed = hecho; started (In Progress, In Review, Shipping) = en curso;
+// backlog/unstarted/triage = pendiente; canceled/duplicate no cuentan.
+function planLinear(key) {
+  const regla = PLAN_LINEAR[key], issues = [], porEstado = {};
+  for (const p of LINEAR.proyectos) for (const i of p.issues) if (regla.es(p, i)) issues.push(i);
+  let verde = 0, amarillo = 0, rojo = 0;
+  for (const i of issues) {
+    if (i.tipo === 'canceled' || i.tipo === 'duplicate') continue;
+    porEstado[i.st] = (porEstado[i.st] || 0) + 1;
+    if (i.tipo === 'completed') verde++; else if (i.tipo === 'started') amarillo++; else rojo++;
+  }
+  const n = verde + amarillo + rojo;
+  return { verde, amarillo, rojo, n, pct: n ? Math.round(verde * 100 / n) : 0, porEstado, issues };
 }
 
 // Lee los módulos en STAGING. Devuelve null si alguno todavía no cargó (no mostrar un % parcial).
@@ -1535,8 +1573,20 @@ function renderPlan() {
   const cargando = '<span>Esperando datos de ClickUp…</span>';
 
   const filas = PLAN_FRENTES.map(f => {
-    if (f.fuente === 'linear')
-      return fila(f, '<span>Se sigue en <b>Linear</b> (láminas de Paper). Falta conectar el panel a Linear.</span>', null, true);
+    if (f.fuente === 'linear') {
+      if (!LINEAR) return fila(f, LINEAR_ERR
+        ? `<span style="color:${SEM_COLOR.rojo}">No se pudo leer Linear: ${esc(LINEAR_ERR)}</span>`
+        : '<span>Esperando datos de Linear…</span>', null, true);
+      const x = planLinear(f.key);
+      if (!x.n) return fila(f, `<span>No hay issues cargados en Linear para este frente (${esc(PLAN_LINEAR[f.key].desc)}).</span>`, 0);
+      const estados = Object.entries(x.porEstado).sort((a, b) => b[1] - a[1])
+        .map(([s, c]) => `<span>${esc(s)} <b>${fmt(c)}</b></span>`).join('');
+      const pocos = x.issues.length <= 3
+        ? `<div>${x.issues.map(i => `<a href="${escAttr(i.u)}" target="_blank" style="color:var(--text)">${esc(i.id)} ${esc(i.t)}</a> · ${esc(i.st)}`).join('<br>')}</div>` : '';
+      return fila(f, `${barra3(x.verde, x.amarillo, x.rojo, 'En curso')}
+        <div class="plan-sub">${estados}</div>
+        <div>Hechos <b style="color:var(--text)">${fmt(x.verde)}</b> de ${fmt(x.n)} · ${esc(PLAN_LINEAR[f.key].desc)}</div>${pocos}`, x.pct);
+    }
     if (!vistas) return fila(f, cargando, null);
     if (f.key === 'bugs') {
       const x = planBugs(vistas);
@@ -1566,7 +1616,7 @@ function renderPlan() {
   return `<div class="plan-wrap">
     <div class="plan-head">
       <h2>Plan migración · listos para migrar clientes el 11/12 ${hoy >= 0 ? `(faltan ${hoy} días)` : ''}</h2>
-      <div class="sub">ClickUp en vivo sobre STAGING (tareas + subtareas, mismo cálculo que Avance) · Bugs a cero = todos los módulos · Registración = dominio «Registración» de Insumos y Contable · los frentes de Linear se suman cuando el panel tenga acceso</div>
+      <div class="sub">ClickUp en vivo sobre STAGING (tareas + subtareas, mismo cálculo que Avance) · Bugs a cero = todos los módulos · Registración = dominio «Registración» de Insumos y Contable · UI unificada, MCP y Conciliación/lectura = Linear en vivo (Done sobre el total sin Canceled ni Duplicate; amarillo = en curso, in review o shipping)</div>
     </div>
     ${filas}
   </div>`;
