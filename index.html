@@ -128,6 +128,26 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif
 .avance-wrap th.pct { text-align:center; }
 .avance-wrap tr.tot td { border-top:2px solid var(--border); }
 
+/* Plan migración: frentes del plan «Listos para migrar clientes» (11/12) */
+.plan-wrap { max-width:1100px; display:flex; flex-direction:column; gap:14px; }
+.plan-head h2 { font-size:16px; font-weight:700; margin:0 0 4px; }
+.plan-head .sub { font-size:12px; color:var(--text-muted); }
+.plan-row { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:16px 20px;
+            display:grid; grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) 96px; gap:18px; align-items:center; }
+.plan-row.espera { opacity:.75; border-style:dashed; }
+.plan-tit { font-size:14.5px; font-weight:700; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.plan-src { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; padding:2px 7px;
+            border-radius:6px; border:1px solid var(--border); color:var(--text-muted); }
+.plan-meta { font-size:12px; color:var(--text-muted); margin-top:4px; }
+.plan-meta b { color:var(--text); font-weight:600; }
+.plan-det { font-size:12px; color:var(--text-muted); display:flex; flex-direction:column; gap:6px; }
+.plan-det .bar { height:8px; }
+.plan-pct { text-align:right; font-size:26px; font-weight:800; font-variant-numeric:tabular-nums; line-height:1; }
+.plan-dias { font-size:11px; font-weight:600; margin-top:6px; text-align:right; }
+.plan-sub { display:flex; gap:14px; flex-wrap:wrap; }
+.plan-sub span b { color:var(--text); }
+@media (max-width:760px) { .plan-row { grid-template-columns:1fr; } .plan-pct, .plan-dias { text-align:left; } }
+
 /* Tabla comparativa */
 .table-wrap { background:var(--surface); border:1px solid var(--border); border-radius:14px; overflow:auto; }
 table { width:100%; border-collapse:collapse; font-size:13px; min-width:900px; }
@@ -181,6 +201,7 @@ a.link:hover { text-decoration:underline; }
 <div class="totalizers" id="totalizers"></div>
 
 <div class="tabs">
+  <button class="tab" data-tab="plan">Plan migración</button>
   <button class="tab" data-tab="avance" id="tabAvance" hidden>Avance</button>
   <button class="tab active" data-tab="celulas">Células</button>
   <button class="tab" data-tab="detalle">Detalle por sprint</button>
@@ -977,6 +998,7 @@ function readCache() {
 // se duplicaban los pedidos a ClickUp y el 429 hacía que tardaran todavía más.
 let CARGANDO = false;
 async function loadAll(opts) {
+  pedirLinear();
   if (CARGANDO) return;
   CARGANDO = true;
   try { await cargarTodo(opts); } finally { CARGANDO = false; }
@@ -1430,6 +1452,176 @@ function renderAvance() {
   </div>`;
 }
 
+// ============================================================
+// RENDER — Plan migración (plan «Listos para migrar clientes», objetivo 11/12/2026)
+// ============================================================
+// Siempre se calcula sobre STAGING, sin importar el ambiente elegido arriba.
+// Los frentes de diseño (UI unificada, MCP, Conciliación y lectura) se siguen en Linear:
+// quedan «esperando conexión» hasta que el worker tenga acceso a Linear.
+// Qué issues de Linear cuentan para cada frente (se lee de /api/linear/estado del worker).
+const PLAN_LINEAR = {
+  ui:   { desc:'proyectos «Diseño · …» de Linear',
+          es:(p, i) => /^Diseño · /.test(p.proyecto) },
+  mcp:  { desc:'issues «MCP · …» de Linear',
+          es:(p, i) => /^MCP · /.test(i.t) },
+  conc: { desc:'issues de conciliación automática o carga/lectura de comprobantes (fuera de Diseño)',
+          es:(p, i) => !/^Diseño · /.test(p.proyecto) && /concilia|carga comprobantes|lectura de comprobantes|comprobantes por imagen/i.test(i.t) }
+};
+const PLAN_FRENTES = [
+  { key:'ui',    titulo:'UI unificada (migrada)',                 dueno:'Facundo',           fecha:'2026-11-27', fuente:'linear' },
+  { key:'bugs',  titulo:'Bugs a cero',                            dueno:'Tiago · Pablo',     fecha:'2026-12-01', fuente:'clickup' },
+  { key:'mcp',   titulo:'MCP (MVP)',                              dueno:'Facundo',           fecha:'2026-12-04', fuente:'linear' },
+  { key:'conc',  titulo:'Conciliación y lectura de comprobantes', dueno:'Nacho · Matías',    fecha:'2026-12-04', fuente:'linear' },
+  { key:'reg',   titulo:'Registración (Insumos y Contable)',      dueno:'Lorena · Laura',    fecha:'2026-12-04', fuente:'clickup',
+    nota:'Test 4/12 · arreglos 11/12 · OK final de Carolina, Lucía y Laura' }
+];
+const PLAN_REG_MODULOS = ['Insumos', 'Contable'];
+
+function diasHasta(iso) {
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+  const f = new Date(iso + 'T00:00:00');
+  return Math.round((f - hoy) / 86400000);
+}
+function fechaCorta(iso) { const [, m, d] = iso.split('-'); return `${+d}/${+m}`; }
+function diasChip(iso, pct) {
+  const d = diasHasta(iso);
+  if (pct === 100) return `<div class="plan-dias" style="color:${SEM_COLOR.verde}">cumplido</div>`;
+  if (d < 0)  return `<div class="plan-dias" style="color:${SEM_COLOR.rojo}">vencido hace ${-d} día${d === -1 ? '' : 's'}</div>`;
+  if (d === 0) return `<div class="plan-dias" style="color:${SEM_COLOR.rojo}">vence hoy</div>`;
+  return `<div class="plan-dias" style="color:${d <= 3 ? SEM_COLOR.amarillo : 'var(--text-muted)'}">faltan ${d} día${d === 1 ? '' : 's'}</div>`;
+}
+function barra3(verde, amarillo, rojo, lblAm = 'En QA') {
+  const n = verde + amarillo + rojo;
+  if (!n) return '<div class="bar"></div>';
+  const seg = (v, c, l) => v ? `<div class="bar-seg" style="width:${v * 100 / n}%;background:${c}" title="${l}: ${fmt(v)}"></div>` : '';
+  return `<div class="bar">${seg(verde, SEM_COLOR.verde, 'Terminado / cerrado')}${seg(amarillo, SEM_COLOR.amarillo, lblAm)}${seg(rojo, SEM_COLOR.rojo, 'Sin resolver')}</div>`;
+}
+
+// Linear: una sola lectura (el worker la cachea 5 min). null = todavía no llegó.
+let LINEAR = null, LINEAR_ERR = null, LINEAR_PIDIENDO = false;
+async function pedirLinear() {
+  if (LINEAR_PIDIENDO) return;
+  LINEAR_PIDIENDO = true;
+  try {
+    const r = await fetch(PROXY + '/api/linear/estado', { signal: AbortSignal.timeout(30000) });
+    const j = await r.json();
+    if (!r.ok || j.error) throw new Error(j.error || ('HTTP ' + r.status));
+    LINEAR = j; LINEAR_ERR = null;
+  } catch (e) { LINEAR_ERR = e.message || String(e); }
+  finally { LINEAR_PIDIENDO = false; if (currentTab === 'plan') render(); }
+}
+// Estados de Linear por tipo: completed = hecho; started (In Progress, In Review, Shipping) = en curso;
+// backlog/unstarted/triage = pendiente; canceled/duplicate no cuentan.
+function planLinear(key) {
+  const regla = PLAN_LINEAR[key], issues = [], porEstado = {};
+  for (const p of LINEAR.proyectos) for (const i of p.issues) if (regla.es(p, i)) issues.push(i);
+  let verde = 0, amarillo = 0, rojo = 0;
+  for (const i of issues) {
+    if (i.tipo === 'canceled' || i.tipo === 'duplicate') continue;
+    porEstado[i.st] = (porEstado[i.st] || 0) + 1;
+    if (i.tipo === 'completed') verde++; else if (i.tipo === 'started') amarillo++; else rojo++;
+  }
+  const n = verde + amarillo + rojo;
+  return { verde, amarillo, rojo, n, pct: n ? Math.round(verde * 100 / n) : 0, porEstado, issues };
+}
+
+// Lee los módulos en STAGING. Devuelve null si alguno todavía no cargó (no mostrar un % parcial).
+function planStaging() {
+  const real = RAW.filter(r => isCell(r) && r.cell.space && !r.cell.qa);
+  if (!real.length || real.some(r => r.cargando)) return null;
+  return real.map(r => viewOf(r, 'staging'));
+}
+function planBugs(vistas) {
+  let verde = 0, amarillo = 0, rojo = 0;
+  const porModulo = [];
+  for (const v of vistas) {
+    const b = v.buckets;
+    const vv = b.terminado.p + b.terminado.s, aa = b.qa.p + b.qa.s;
+    const n = BUCKETS.reduce((a, k) => a + b[k.key].p + b[k.key].s, 0);
+    verde += vv; amarillo += aa; rojo += n - vv - aa;
+    if (n) porModulo.push({ m:v.cell.module, abiertos:n - vv });
+  }
+  const n = verde + amarillo + rojo;
+  return { verde, amarillo, rojo, n, pct: n ? Math.round(verde * 100 / n) : 0, porModulo };
+}
+function planRegistracion(vistas) {
+  const partes = [];
+  let verde = 0, amarillo = 0, n = 0;
+  for (const mod of PLAN_REG_MODULOS) {
+    const v = vistas.find(x => x.cell.module === mod);
+    const d = v && v.dom && v.dom.Registracion;
+    if (!d) { partes.push({ m:mod, sinDatos:true }); continue; }
+    const x = domPct(d);
+    partes.push({ m:mod, pct:x.pct, n:x.n, verde:x.verde });
+    verde += x.verde; amarillo += x.amarillo; n += x.n;
+  }
+  return { verde, amarillo, rojo:n - verde - amarillo, n, pct: n ? Math.round(verde * 100 / n) : 0, partes };
+}
+
+function renderPlan() {
+  const vistas = planStaging();
+  const fila = (f, cuerpo, pct, espera) => `<div class="plan-row${espera ? ' espera' : ''}">
+      <div>
+        <div class="plan-tit">${esc(f.titulo)} <span class="plan-src">${f.fuente === 'linear' ? 'Linear' : 'ClickUp · staging'}</span></div>
+        <div class="plan-meta">Dueño: <b>${esc(f.dueno)}</b> · Fecha: <b>${fechaCorta(f.fecha)}</b>${f.nota ? ` · ${esc(f.nota)}` : ''}</div>
+      </div>
+      <div class="plan-det">${cuerpo}</div>
+      <div>${pct == null ? '<div class="plan-pct" style="color:var(--text-muted)">—</div>'
+                         : `<div class="plan-pct" style="color:${avanceColor(pct)}">${pct}%</div>`}
+        ${diasChip(f.fecha, pct)}</div>
+    </div>`;
+  const cargando = '<span>Esperando datos de ClickUp…</span>';
+
+  const filas = PLAN_FRENTES.map(f => {
+    if (f.fuente === 'linear') {
+      if (!LINEAR) return fila(f, LINEAR_ERR
+        ? `<span style="color:${SEM_COLOR.rojo}">No se pudo leer Linear: ${esc(LINEAR_ERR)}</span>`
+        : '<span>Esperando datos de Linear…</span>', null, true);
+      const x = planLinear(f.key);
+      if (!x.n) return fila(f, `<span>No hay issues cargados en Linear para este frente (${esc(PLAN_LINEAR[f.key].desc)}).</span>`, 0);
+      const estados = Object.entries(x.porEstado).sort((a, b) => b[1] - a[1])
+        .map(([s, c]) => `<span>${esc(s)} <b>${fmt(c)}</b></span>`).join('');
+      const pocos = x.issues.length <= 3
+        ? `<div>${x.issues.map(i => `<a href="${escAttr(i.u)}" target="_blank" style="color:var(--text)">${esc(i.id)} ${esc(i.t)}</a> · ${esc(i.st)}`).join('<br>')}</div>` : '';
+      return fila(f, `${barra3(x.verde, x.amarillo, x.rojo, 'En curso')}
+        <div class="plan-sub">${estados}</div>
+        <div>Hechos <b style="color:var(--text)">${fmt(x.verde)}</b> de ${fmt(x.n)} · ${esc(PLAN_LINEAR[f.key].desc)}</div>${pocos}`, x.pct);
+    }
+    if (!vistas) return fila(f, cargando, null);
+    if (f.key === 'bugs') {
+      const x = planBugs(vistas);
+      const abiertos = x.amarillo + x.rojo;
+      return fila(f, `${barra3(x.verde, x.amarillo, x.rojo)}
+        <div class="plan-sub">
+          <span>Abiertos <b>${fmt(abiertos)}</b></span>
+          <span>Sin resolver <b>${fmt(x.rojo)}</b></span>
+          <span>En QA <b>${fmt(x.amarillo)}</b></span>
+          <span>Cerrados <b>${fmt(x.verde)}</b> de ${fmt(x.n)}</span>
+        </div>
+        <div>${x.porModulo.filter(p => p.abiertos).map(p => `${esc(p.m)} <b style="color:var(--text)">${fmt(p.abiertos)}</b>`).join(' · ') || 'Sin bugs abiertos'}</div>`,
+        x.n ? x.pct : null);
+    }
+    if (f.key === 'reg') {
+      const x = planRegistracion(vistas);
+      return fila(f, `${barra3(x.verde, x.amarillo, x.rojo)}
+        <div class="plan-sub">${x.partes.map(p => p.sinDatos
+          ? `<span>${esc(p.m)} <b>sin datos</b></span>`
+          : `<span>${esc(p.m)} <b style="color:${avanceColor(p.pct)}">${p.pct}%</b> (${fmt(p.verde)} de ${fmt(p.n)})</span>`).join('')}</div>`,
+        x.n ? x.pct : null);
+    }
+    return '';
+  }).join('');
+
+  const hoy = diasHasta('2026-12-11');
+  return `<div class="plan-wrap">
+    <div class="plan-head">
+      <h2>Plan migración · listos para migrar clientes el 11/12 ${hoy >= 0 ? `(faltan ${hoy} días)` : ''}</h2>
+      <div class="sub">ClickUp en vivo sobre STAGING (tareas + subtareas, mismo cálculo que Avance) · Bugs a cero = todos los módulos · Registración = dominio «Registración» de Insumos y Contable · UI unificada, MCP y Conciliación/lectura = Linear en vivo (Done sobre el total sin Canceled ni Duplicate; amarillo = en curso, in review o shipping)</div>
+    </div>
+    ${filas}
+  </div>`;
+}
+
 function renderCelulas() {
   return `<div class="cells-grid">${DATA.filter(isCell).map(cellCard).join('')}</div>`;
 }
@@ -1499,7 +1691,8 @@ function render() {
     : '') + (ENV === 'ramas'
     ? `<div class="note" style="margin-bottom:14px">🔒 <b>RAMAS congelado al ${RAMAS_CONGELADO.fecha}</b>: es la foto final de las pruebas en ramas separadas y ya no se actualiza. Lo pendiente se movió a los sprints de los ambientes, donde se sigue contando (STAGING, PRODUCCIÓN).</div>`
     : '');
-  if (currentTab === 'avance')      el.innerHTML = banner + renderAvance();
+  if (currentTab === 'plan')        el.innerHTML = (USED_SNAPSHOT ? banner : '') + renderPlan();
+  else if (currentTab === 'avance') el.innerHTML = banner + renderAvance();
   else if (currentTab === 'celulas') el.innerHTML = banner + renderCelulas();
   else                              el.innerHTML = banner + renderDetalle();
 }
