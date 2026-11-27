@@ -147,6 +147,21 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif
 .plan-sub { display:flex; gap:14px; flex-wrap:wrap; }
 .plan-sub span b { color:var(--text); }
 @media (max-width:760px) { .plan-row { grid-template-columns:1fr; } .plan-pct, .plan-dias { text-align:left; } }
+/* Contador «a cero» por módulo (pendiente + en curso + reabierta), al costado de los frentes */
+.plan-layout { display:grid; grid-template-columns:minmax(0,1fr) 270px; gap:16px; align-items:start; max-width:1400px; }
+.plan-layout .plan-wrap { max-width:none; }
+.plan-cero { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:16px 18px; position:sticky; top:12px; }
+.plan-cero h3 { font-size:14px; font-weight:700; margin:0 0 2px; }
+.plan-cero .sub { font-size:11px; color:var(--text-muted); margin-bottom:12px; }
+.cero-mod { display:grid; grid-template-columns:10px minmax(0,1fr) auto; gap:4px 10px; align-items:center; padding:10px 0; border-top:1px solid var(--border); }
+.cero-mod .sq { width:10px; height:10px; border-radius:3px; }
+.cero-mod .nom { font-size:13px; font-weight:600; }
+.cero-mod .num { font-size:24px; font-weight:800; font-variant-numeric:tabular-nums; text-align:right; line-height:1; grid-row:span 2; }
+.cero-mod .det { grid-column:2; font-size:11px; color:var(--text-muted); }
+.cero-mod .det b { color:var(--text); font-weight:600; }
+.cero-mod.total { border-top:2px solid var(--border); }
+.cero-mod.total .nom { font-weight:800; }
+@media (max-width:1000px) { .plan-layout { grid-template-columns:1fr; } .plan-cero { position:static; } }
 
 /* Tabla comparativa */
 .table-wrap { background:var(--surface); border:1px solid var(--border); border-radius:14px; overflow:auto; }
@@ -1558,6 +1573,34 @@ function planRegistracion(vistas) {
   return { verde, amarillo, rojo:n - verde - amarillo, n, pct: n ? Math.round(verde * 100 / n) : 0, partes };
 }
 
+// Contador «a cero»: por módulo, tareas + subtareas en Pendiente/Bloqueada, En curso y Reabierta (staging).
+const PLAN_CERO_MODULOS = ['Insumos', 'Contable'];
+function planCero(vistas) {
+  const filas = PLAN_CERO_MODULOS.map(m => vistas.find(v => v.cell.module === m)).filter(Boolean).map(v => {
+    const b = v.buckets, n = k => b[k].p + b[k].s;
+    const x = { m:v.cell.module, hex:v.cell.hex, pend:n('pendiente'), curso:n('curso'), reab:n('reabierta') };
+    x.total = x.pend + x.curso + x.reab; return x;
+  });
+  const tot = filas.reduce((a, x) => ({ pend:a.pend + x.pend, curso:a.curso + x.curso, reab:a.reab + x.reab, total:a.total + x.total }),
+                           { pend:0, curso:0, reab:0, total:0 });
+  return { filas, tot };
+}
+function renderPlanCero(vistas) {
+  const head = `<h3>A cero · Insumos y Contable</h3><div class="sub">ClickUp · staging · tareas + subtareas en Pendiente/Bloqueada, En curso y Reabierta. Meta: 0.</div>`;
+  if (!vistas) return `<aside class="plan-cero">${head}<div class="sub">Esperando datos de ClickUp…</div></aside>`;
+  const x = planCero(vistas);
+  const color = n => n ? SEM_COLOR.rojo : SEM_COLOR.verde;
+  const fila = (f, cls, hex) => `<div class="cero-mod${cls}">
+      <span class="sq" style="background:${hex}"></span><span class="nom">${esc(f.m)}</span>
+      <span class="num" style="color:${color(f.total)}">${fmt(f.total)}</span>
+      <span class="det">Pend. <b>${fmt(f.pend)}</b> · Curso <b>${fmt(f.curso)}</b> · Reab. <b>${fmt(f.reab)}</b></span>
+    </div>`;
+  return `<aside class="plan-cero">${head}
+    ${x.filas.map(f => fila(f, '', f.hex)).join('')}
+    ${fila(Object.assign({ m:'Total' }, x.tot), ' total', 'transparent')}
+  </aside>`;
+}
+
 function renderPlan() {
   const vistas = planStaging();
   const fila = (f, cuerpo, pct, espera) => `<div class="plan-row${espera ? ' espera' : ''}">
@@ -1613,13 +1656,13 @@ function renderPlan() {
   }).join('');
 
   const hoy = diasHasta('2026-12-11');
-  return `<div class="plan-wrap">
+  return `<div class="plan-layout"><div class="plan-wrap">
     <div class="plan-head">
       <h2>Plan migración · listos para migrar clientes el 11/12 ${hoy >= 0 ? `(faltan ${hoy} días)` : ''}</h2>
       <div class="sub">ClickUp en vivo sobre STAGING (tareas + subtareas, mismo cálculo que Avance) · Bugs a cero = todos los módulos · Registración = dominio «Registración» de Insumos y Contable · UI unificada, MCP y Conciliación/lectura = Linear en vivo (Done sobre el total sin Canceled ni Duplicate; amarillo = en curso, in review o shipping)</div>
     </div>
     ${filas}
-  </div>`;
+  </div>${renderPlanCero(vistas)}</div>`;
 }
 
 function renderCelulas() {
