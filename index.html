@@ -147,21 +147,6 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif
 .plan-sub { display:flex; gap:14px; flex-wrap:wrap; }
 .plan-sub span b { color:var(--text); }
 @media (max-width:760px) { .plan-row { grid-template-columns:1fr; } .plan-pct, .plan-dias { text-align:left; } }
-/* Contador «a cero» por módulo (pendiente + en curso + reabierta), al costado de los frentes */
-.plan-layout { display:grid; grid-template-columns:minmax(0,1fr) 270px; gap:16px; align-items:start; max-width:1400px; }
-.plan-layout .plan-wrap { max-width:none; }
-.plan-cero { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:16px 18px; position:sticky; top:12px; }
-.plan-cero h3 { font-size:14px; font-weight:700; margin:0 0 2px; }
-.plan-cero .sub { font-size:11px; color:var(--text-muted); margin-bottom:12px; }
-.cero-mod { display:grid; grid-template-columns:10px minmax(0,1fr) auto; gap:4px 10px; align-items:center; padding:10px 0; border-top:1px solid var(--border); }
-.cero-mod .sq { width:10px; height:10px; border-radius:3px; }
-.cero-mod .nom { font-size:13px; font-weight:600; }
-.cero-mod .num { font-size:24px; font-weight:800; font-variant-numeric:tabular-nums; text-align:right; line-height:1; grid-row:span 2; }
-.cero-mod .det { grid-column:2; font-size:11px; color:var(--text-muted); }
-.cero-mod .det b { color:var(--text); font-weight:600; }
-.cero-mod.total { border-top:2px solid var(--border); }
-.cero-mod.total .nom { font-weight:800; }
-@media (max-width:1000px) { .plan-layout { grid-template-columns:1fr; } .plan-cero { position:static; } }
 
 /* Tabla comparativa */
 .table-wrap { background:var(--surface); border:1px solid var(--border); border-radius:14px; overflow:auto; }
@@ -1578,27 +1563,15 @@ const PLAN_CERO_MODULOS = ['Insumos', 'Contable'];
 function planCero(vistas) {
   const filas = PLAN_CERO_MODULOS.map(m => vistas.find(v => v.cell.module === m)).filter(Boolean).map(v => {
     const b = v.buckets, n = k => b[k].p + b[k].s;
-    const x = { m:v.cell.module, hex:v.cell.hex, pend:n('pendiente'), curso:n('curso'), reab:n('reabierta') };
-    x.total = x.pend + x.curso + x.reab; return x;
+    const x = { m:v.cell.module, pend:n('pendiente'), curso:n('curso'), reab:n('reabierta'),
+                n:BUCKETS.reduce((a, k) => a + n(k.key), 0) };
+    x.total = x.pend + x.curso + x.reab;
+    x.pct = x.n ? Math.floor((x.n - x.total) * 100 / x.n) : 100; return x;
   });
-  const tot = filas.reduce((a, x) => ({ pend:a.pend + x.pend, curso:a.curso + x.curso, reab:a.reab + x.reab, total:a.total + x.total }),
-                           { pend:0, curso:0, reab:0, total:0 });
+  const tot = filas.reduce((a, x) => ({ pend:a.pend + x.pend, curso:a.curso + x.curso, reab:a.reab + x.reab,
+                                         total:a.total + x.total, n:a.n + x.n }), { pend:0, curso:0, reab:0, total:0, n:0 });
+  tot.pct = tot.n ? Math.floor((tot.n - tot.total) * 100 / tot.n) : 100;
   return { filas, tot };
-}
-function renderPlanCero(vistas) {
-  const head = `<h3>A cero · Insumos y Contable</h3><div class="sub">ClickUp · staging · tareas + subtareas en Pendiente/Bloqueada, En curso y Reabierta. Meta: 0.</div>`;
-  if (!vistas) return `<aside class="plan-cero">${head}<div class="sub">Esperando datos de ClickUp…</div></aside>`;
-  const x = planCero(vistas);
-  const color = n => n ? SEM_COLOR.rojo : SEM_COLOR.verde;
-  const fila = (f, cls, hex) => `<div class="cero-mod${cls}">
-      <span class="sq" style="background:${hex}"></span><span class="nom">${esc(f.m)}</span>
-      <span class="num" style="color:${color(f.total)}">${fmt(f.total)}</span>
-      <span class="det">Pend. <b>${fmt(f.pend)}</b> · Curso <b>${fmt(f.curso)}</b> · Reab. <b>${fmt(f.reab)}</b></span>
-    </div>`;
-  return `<aside class="plan-cero">${head}
-    ${x.filas.map(f => fila(f, '', f.hex)).join('')}
-    ${fila(Object.assign({ m:'Total' }, x.tot), ' total', 'transparent')}
-  </aside>`;
 }
 
 function renderPlan() {
@@ -1632,17 +1605,18 @@ function renderPlan() {
     }
     if (!vistas) return fila(f, cargando, null);
     if (f.key === 'bugs') {
-      const x = planBugs(vistas);
-      const abiertos = x.amarillo + x.rojo;
-      return fila(f, `${barra3(x.verde, x.amarillo, x.rojo)}
+      const x = planCero(vistas), t = x.tot;
+      return fila(f, `${barra3(t.n - t.total, 0, t.total)}
         <div class="plan-sub">
-          <span>Abiertos <b>${fmt(abiertos)}</b></span>
-          <span>Sin resolver <b>${fmt(x.rojo)}</b></span>
-          <span>En QA <b>${fmt(x.amarillo)}</b></span>
-          <span>Cerrados <b>${fmt(x.verde)}</b> de ${fmt(x.n)}</span>
+          <span>Por resolver <b style="color:${t.total ? SEM_COLOR.rojo : SEM_COLOR.verde}">${fmt(t.total)}</b> de ${fmt(t.n)}</span>
+          <span>Pendiente/Bloqueada <b>${fmt(t.pend)}</b></span>
+          <span>En curso <b>${fmt(t.curso)}</b></span>
+          <span>Reabierta <b>${fmt(t.reab)}</b></span>
         </div>
-        <div>${x.porModulo.filter(p => p.abiertos).map(p => `${esc(p.m)} <b style="color:var(--text)">${fmt(p.abiertos)}</b>`).join(' · ') || 'Sin bugs abiertos'}</div>`,
-        x.n ? x.pct : null);
+        <div class="plan-sub">${x.filas.map(m => `<span>${esc(m.m)} <b style="color:${m.total ? SEM_COLOR.rojo : SEM_COLOR.verde}">${fmt(m.total)}</b>
+          (P ${fmt(m.pend)} · C ${fmt(m.curso)} · R ${fmt(m.reab)}) · <b style="color:${avanceColor(m.pct)}">${m.pct}%</b></span>`).join('')}</div>
+        <div>Meta: 0 en Insumos y Contable = 100%</div>`,
+        t.n ? t.pct : null);
     }
     if (f.key === 'reg') {
       const x = planRegistracion(vistas);
@@ -1656,13 +1630,13 @@ function renderPlan() {
   }).join('');
 
   const hoy = diasHasta('2026-12-11');
-  return `<div class="plan-layout"><div class="plan-wrap">
+  return `<div class="plan-wrap">
     <div class="plan-head">
       <h2>Plan migración · listos para migrar clientes el 11/12 ${hoy >= 0 ? `(faltan ${hoy} días)` : ''}</h2>
-      <div class="sub">ClickUp en vivo sobre STAGING (tareas + subtareas, mismo cálculo que Avance) · Bugs a cero = todos los módulos · Registración = dominio «Registración» de Insumos y Contable · UI unificada, MCP y Conciliación/lectura = Linear en vivo (Done sobre el total sin Canceled ni Duplicate; amarillo = en curso, in review o shipping)</div>
+      <div class="sub">ClickUp en vivo sobre STAGING (tareas + subtareas, mismo cálculo que Avance) · Bugs a cero = Insumos y Contable, % = tarjetas que ya no están en Pendiente/Bloqueada, En curso ni Reabierta · Registración = dominio «Registración» de Insumos y Contable · UI unificada, MCP y Conciliación/lectura = Linear en vivo (Done sobre el total sin Canceled ni Duplicate; amarillo = en curso, in review o shipping)</div>
     </div>
     ${filas}
-  </div>${renderPlanCero(vistas)}</div>`;
+  </div>`;
 }
 
 function renderCelulas() {
